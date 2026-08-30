@@ -1,0 +1,4 @@
+"0","# factor levels"
+"0","# dds$condition <- factor(dds$chemical, levels = c(""untreated"",""treated""))"
+"0","dds$chemical <- relevel(dds$chemical, ref = c(""DMSO"")) # use DMSO as the reference"
+"0","# dds$chemical <- relevel(dds$chemical, ref = c(""water""))"

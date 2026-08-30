@@ -1,0 +1,4 @@
+"0","PFAS_metadata <- read.csv(""data/metadata/pfas/SraRunTable.csv"", row.names = 1)"
+"0","# PFAS_D1 <- read.table(""metadata/pfas/GSE144775_DataFilteredD1.txt"", sep = '\t',header = TRUE,"
+"0","#                       # fileEncoding = ""UTF-16LE"""
+"0","#                       )"

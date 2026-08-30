@@ -1,0 +1,2 @@
+"0","GSMtoSRR <- df_GSMtoSRR_merged %>% select('SRR','chemical.y','duration','dose')"
+"0","head(GSMtoSRR)"

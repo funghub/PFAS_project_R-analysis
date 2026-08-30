@@ -1,0 +1,4 @@
+"0","# select only columns/samples if they are in the metadata file"
+"0","markdups_counts_pfas_cleancols_filtered <- markdups_counts_pfas_cleancols %>%"
+"0","  select(metadata_PFAS_filtered_joined$SRR)"
+"0","head(markdups_counts_pfas_cleancols_filtered)"

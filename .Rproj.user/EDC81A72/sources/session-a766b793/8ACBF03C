@@ -1,0 +1,27 @@
+{
+    "id": "8ACBF03C",
+    "path": "~/Documents/School/thesis/PFAS_R-analysis/code/clean_data_PFAS.Rmd",
+    "project_path": "code/clean_data_PFAS.Rmd",
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1787387183213.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "last_setup_crc32": "",
+        "cursorPosition": "290,74",
+        "scrollLine": "275"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1787387298,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1787387298024,
+    "read_only": false,
+    "read_only_alternatives": []
+}

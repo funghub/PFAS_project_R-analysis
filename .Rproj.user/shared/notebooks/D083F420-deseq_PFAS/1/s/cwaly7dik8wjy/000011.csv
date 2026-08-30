@@ -1,0 +1,8 @@
+"0","# Pre-filtering: Remove low count genes"
+"0","# dds <- dds[rowSums(counts(dds)) > 0, ] #10"
+"0","# head(dds)"
+"0",""
+"0","smallestGroupSize <- min(count(metadata_PFAS_filtered_joined, chemical, dose)$n) # smallest replicate number"
+"0","# keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize # original"
+"0","keep <- rowSums(counts(dds) > 0) >= smallestGroupSize"
+"0","dds <- dds[keep,]"

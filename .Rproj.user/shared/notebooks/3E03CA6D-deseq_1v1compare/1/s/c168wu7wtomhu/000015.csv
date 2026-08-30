@@ -1,0 +1,8 @@
+"0","# Add significance column"
+"0","results$significant <- results$padj < 0.05 & abs(results$log2FoldChange) > 1"
+"0",""
+"0","# Volcano plot"
+"0","ggplot(results, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +"
+"0","  geom_point() +"
+"0","  theme_minimal() +"
+"0","  labs(x = ""Log2 Fold Change"", y = ""-Log10 P-value"")"

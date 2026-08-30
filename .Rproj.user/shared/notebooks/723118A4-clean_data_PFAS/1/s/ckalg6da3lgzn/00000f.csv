@@ -1,0 +1,5 @@
+"0","# SRR_table_all <- GSMtoSRR %>% "
+"0","#   # filter(chemical == 'water') %>% "
+"0","#   rename('chemical.y' = 'chemical', 'duration' = 'timepoint')"
+"0",""
+"0","write.csv(GSMtoSRR,""./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv"",row.names = FALSE)"

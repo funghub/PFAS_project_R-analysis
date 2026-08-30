@@ -1,0 +1,6 @@
+"0","# Lead the reference counts files for PFAS dataset"
+"0","markdups_counts_pfas <- read.table(""./data/featureCounts/pfas/markdups_counts_pfas.txt"", header=TRUE, sep = ""\t"", row.names = 1)"
+"0","raw_counts_pfas <- read.table(""./data/featureCounts/pfas/raw_counts_pfas.txt"", header=TRUE, sep =""\t"", row.names = 1)"
+"0",""
+"0","# markdups_counts_ref <- read.table(""./data/featureCounts/ref/markdups_counts_ref.txt"", header=TRUE, sep = ""\t"", row.names = 1)"
+"0","# raw_counts_ref <- read.table(""./data/featureCounts/ref/raw_counts_ref.txt"", header=TRUE, sep =""\t"", row.names = 1)"

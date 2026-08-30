@@ -1,0 +1,356 @@
+---
+title: "differential_expression"
+output: html_document
+date: "2026-06-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = here::here())
+knitr::opts_chunk$set(echo = TRUE)
+# set the root dir as [1] "/home/lawrence/Documents/School/thesis/PFAS_R-analysis"
+```
+
+```{r load_lib, message = FALSE}
+# Load additional libraries that might be useful (these may need to be installed)
+library(ggplot2)
+library(pheatmap)
+library(RColorBrewer)
+library(VennDiagram)
+library(gProfileR)
+
+# convert gene id to symbols
+library(org.Hs.eg.db)
+library(annotate)
+
+library(dplyr) # this is to load piping %>%
+select <- dplyr::select # this is to help with the conflict of select()
+count <- dplyr::count
+
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+```
+
+Combine the SRR conversion tables from PFAS and Ref into a single one!
+- we can use this to rename the sample names in the future to add chemical, (not dosage), duration
+- this can validate whether we added the right chemicals and confirms if function to aggregate the samples and filter works in the clean_data....Rmd files!!!!!
+```{r}
+SRR_ref <- read.csv("./data/data_input_deseq/metadata_ref/ref_metadata_all.csv") %>%
+  select(-'replicate')#
+SRR_PFAS <- read.csv("./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv")
+```
+Append the two tables together to make a master index
+```{r}
+SRR_all <- rbind(SRR_ref, SRR_PFAS)
+head(SRR_all)
+```
+
+## Retrieve the SRA Metadata csv
+Go to SRA run for the GEO dataset and click Metadata
+```{r}
+metadata_PFAS <- read.csv("./data/metadata/pfas/SraRunTable.csv") %>% rename('SRR' = 'Run')
+metadata_ref <- read.csv("./data/metadata/ref/SraRunTable.csv") %>% rename('SRR' = 'Run')
+```
+
+```{r}
+head(metadata_PFAS)
+```
+```{r}
+head(metadata_ref)
+```
+
+Make a master metadata dataframe adding the information for duration and dose
+- but first, need to filter out those SRR in metadata_PFAS and metadata_ref for only duration == 1,10
+- then we combine those two metadata files but need to configure that metadata_PFAS have the same columns - will need to add back duration and dose to it to continue
+
+```{r}
+# what columns are not the same between the metadata_{}
+# colnames(metadata_PFAS)
+# colnames(metadata_ref)
+print('Whats in PFAS metadata, but not in ref metadata')
+setdiff(colnames(metadata_PFAS),colnames(metadata_ref))
+
+# rename metadata_PFAS column so that it matches columns of metadata_ref
+metadata_PFAS_final <- metadata_PFAS %>%
+  rename('Library.Name' = 'GEO_Accession..exp.')
+
+print('Whats in PFAS metadata_final, but not in ref metadata')
+setdiff(colnames(metadata_PFAS_final),colnames(metadata_ref))
+
+print('Whats in ref metadata, but not in PFAS metadata')
+setdiff(colnames(metadata_ref),colnames(metadata_PFAS_final))
+```
+
+
+```{r}
+# we need to drop some col or enter the missing data into the metadata from the index
+metadata_ref_final <- metadata_ref %>%
+  select(-c('cell_line','Collection_Date','geo_loc_name_country','geo_loc_name_country_continent','geo_loc_name','replicate')) %>%
+  mutate(timepoint = as.numeric(sub("d", "", sub("24h", "1", metadata_ref$timepoint)))) %>%
+  rename('duration' = 'timepoint')
+
+# put dose,timepoint into metadata_PFAS_final (from SRR_all)
+# merge dose and timepoint by SRR
+metadata_PFAS_final_merged <- merge(metadata_PFAS_final, SRR_PFAS, by='SRR', all=TRUE) %>%
+  mutate(chemical = chemical.y) %>% # this so that we only have one chemical col (will be used by DESeq)
+  select(!chemical.y)
+
+ncol(metadata_PFAS_final)
+ncol(SRR_PFAS)
+sum(ncol(metadata_PFAS_final),ncol(SRR_PFAS))
+ncol(metadata_PFAS_final_merged) # sum of both - the col used for the merge
+```
+```{r}
+nrow(metadata_PFAS_final)
+nrow(SRR_PFAS)
+nrow(metadata_PFAS_final_merged)   # will be larger than both if there are unmatched SRRs on either side
+
+head(metadata_PFAS_final_merged)
+head(metadata_ref_final)
+```
+
+
+```{r}
+# validate that both dataframes now have the same columns
+print('Whats in ref metadata, but not in PFAS metadata')
+print('should be nothing now because they should have same col now')
+setdiff(colnames(metadata_ref_final),colnames(metadata_PFAS_final_merged))
+setdiff(colnames(metadata_PFAS_final_merged),colnames(metadata_ref_final))
+
+
+# make the master metadata dataframe combine metadata_PFAS_final with metadata_ref_final
+metadata_all <- rbind(metadata_ref_final,metadata_PFAS_final_merged)
+
+# validate that the sum of the 2 df is the merged
+nrow(metadata_all) == sum(nrow(metadata_ref_final)+nrow(metadata_PFAS_final_merged))
+
+```
+metadata_all has both metadata of ref and PFAS datasets
+```{r}
+head(metadata_all)
+```
+
+NOW take the file from ./data/data_input_deseq/PFASxControl
+- create the associated metadata file for that specific combination (stated in name of counts file)
+- order the metadata file the same as the sub-counts file
+
+STOPPED HERE!!
+
+
+
+create the deseq graphs for all combinations
+
+Read the "./data/data_input_deseq/PFASxControl/PFBSxDMSO_1_markdups.csv" file
+```{r load_data}
+# Lead the reference counts files for PFAS dataset
+# markdups_counts_pfas <- read.table("./data/featureCounts/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
+# raw_counts_pfas <- read.table("./data/featureCounts/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
+# 
+# markdups_counts_ref <- read.table("./data/featureCounts/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
+# raw_counts_ref <- read.table("./data/featureCounts/ref/raw_counts_ref.txt", header=TRUE, sep ="\t", row.names = 1)
+
+# test 1 day PFBS x DMSO x all durations (as an example)
+markdups_counts <- read.csv("./data/data_input_deseq/PFASxControl/PFBSxDMSO_1_markdups.csv", row.names = 1)
+```
+
+create the associated metadata file that has the same samples as cols in "./data/data_input_deseq/PFASxControl/PFBSxDMSO_1_markdups.csv"
+- create the assocated metadata with metadata_all
+```{r}
+head(markdups_counts)
+
+metadata_markdups <- metadata_all %>%
+  filter(SRR %in% colnames(markdups_counts))
+
+head(metadata_markdups)
+
+# validate duration is 1 and chemical are both those
+unique(metadata_markdups$duration) == 1
+unique(metadata_markdups$chemical) == c("DMSO","PFBS")
+```
+Check if the column names are the same as metadata vs counts columns.
+DESeq need exact identical order?? (find where this say)
+
+This confirms that my pipeline featurecounts contain the same samples as the metadata. Nothing more and nothing less.
+
+Now, we need to reorder the columns of featurecounts to be the same as rows in metadata
+"It is absolutely critical that the columns of the count matrix and the rows of the column data (information about samples) are in the same order. DESeq2 will not make guesses as to which column of the count matrix belongs to which row of the column data, these must be provided to DESeq2 already in consistent order."
+https://bioconductor.org/packages//release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#quick-start
+
+```{r}
+ncol(markdups_counts)
+nrow(metadata_markdups)
+# colnames(markdups_counts)
+```
+```{r}
+# make sure that col of counts is in the same order as rows in metadata file
+markdups_counts_aligned <- markdups_counts[
+  match(colnames(markdups_counts), metadata_markdups$SRR)]
+# match(x, table) — for each value in x, finds its position in table
+#returns a vector of row-positions in metadata_PFAS_filtered_joined corresponding to each column name, in order
+
+
+# colnames(markeddups_counts) now must be identical to metadata)markups
+# for deseq to run
+identical(colnames(markdups_counts_aligned), metadata_markdups$SRR)
+```
+```{r}
+# find which one is "batch" for deseq (batch + condition = ?? + chemical)
+colnames(metadata_markdups)
+
+unique(metadata_markdups$create_date)
+unique(metadata_markdups$Instrument)
+
+# I do not see anything right for Batch
+```
+
+```{r}
+# # Replace everything after _ and the _ with nothing in all column names
+# markdups_counts_pfas_cleancols <- markdups_counts_pfas %>%
+#   rename_with(~gsub("_.*", "", .x)) %>% 
+#   select(-c("Chr", "Start", "End", "Strand", "Length"))
+# 
+# raw_counts_pfas_cleancols <- raw_counts_pfas %>% 
+#   rename_with(~gsub("_.*", "", .x)) %>% 
+#   select(-c("Chr", "Start", "End", "Strand", "Length"))
+# 
+# markdups_counts_ref_cleancols <- markdups_counts_ref %>%
+#   rename_with(~gsub("_.*", "", .x)) %>% 
+#   select(-c("Chr", "Start", "End", "Strand", "Length"))
+# 
+# raw_counts_ref_cleancols <- raw_counts_ref %>% 
+#   rename_with(~gsub("_.*", "", .x)) %>% 
+#   select(-c("Chr", "Start", "End", "Strand", "Length"))
+# 
+# head(markdups_counts_pfas_cleancols)
+# head(raw_counts_pfas_cleancols)
+# 
+# head(markdups_counts_ref_cleancols)
+# head(raw_counts_ref_cleancols)
+
+```
+
+
+
+markdups_counts_aligned, metadata_markdups
+USE these two for DESeq!!!
+
+Create DESeq2 dataset
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = markdups_counts_aligned,
+  colData = metadata_markdups,
+  design = ~ chemical
+)
+dds
+```
+ANY OTHERING filtering????
+
+```{r}
+head(metadata_markdups)
+unique(metadata_markdups$chemical)
+# unique(metadata_markdups$chemical)[2]
+
+# number of unique combos for chem, duration, dose
+count(metadata_markdups, chemical, duration, dose)
+min(count(metadata_markdups, chemical, duration, dose)$n)
+```
+
+
+
+
+DESeq2 recommends removing any gene with less than 10 reads across all samples
+https://rnabio.org/module-03-expression/0003/03/03/Differential_Expression-DESeq2/
+
+**smallestGroupSize**: minimum number of samples for the same chemical, dose, and duration in metadata
+
+For one gene row, if the total number of samples (columns) with gene counts of 0 is less than 3, for example, then we remove that gene
+```{r}
+# Pre-filtering: Remove low count genes
+# dds <- dds[rowSums(counts(dds)) > 0, ] #10
+# head(dds)
+
+smallestGroupSize <- min(count(metadata_markdups, chemical, dose)$n) # smallest replicate number
+# keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize # original
+# keep <- rowSums(counts(dds, normalized=TRUE) > 0) >= smallestGroupSize
+keep <- rowSums(counts(dds) > 0) >= smallestGroupSize
+dds <- dds[keep,]
+```
+```{r}
+# counts(dds)
+```
+
+Running the differential expression pipeline
+https://master.bioconductor.org/packages/release/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html#differential-expression-analysis
+```{r}
+# running the differential expression pipeline
+dds <- DESeq(dds) 
+# extracts the estimated log2 fold changes and p values for the last variable in the design formula
+
+# build results table
+results <- results(dds)
+results <- results[order(results$padj), ]
+head(results)
+```
+Notes:
+Subset the samples
+filter out the NA
+compare the samples of diff substances
+
+Try to replicate the canada paper on their genes of focus.
+
+```{r}
+# PCA plot
+vsd <- vst(dds, blind = TRUE)  # Variance-stabilizing transformation
+plotPCA(vsd, intgroup = "chemical") # changed Condition to chemical to match metadata
+
+# subset the samples and then run it again!
+# try all samples with t-SNE to see if separate better
+
+# Heatmap of Sample Distances
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+```
+```{r}
+# Add significance column
+results$significant <- results$padj < 0.05 & abs(results$log2FoldChange) > 1
+
+# Volcano plot
+ggplot(results, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = "Log2 Fold Change", y = "-Log10 P-value")
+```
+Don't know what I'm looking at dds running it later and filtering. Need to figure out what is going on.
+
+Left off at https://rtguides.it.tufts.edu/bio/tutorials/de-seq2-in-r-ood.html
+
+In the future:
+- make a master metadata that has both metadata for PFAS and refs -> metadata_all (HERE)
+- make a master counts dataframe that has both samples from PFAS and refs
+
+```{r}
+# EXAMPLE CODE to subset in the future simpler for faster deseq results
+
+# subset metadata to just this comparison group (or leave it broad if combining all chemicals)
+coldata <- GSMtoSRR %>% 
+  filter(chemical.y %in% c("DMSO","PFOA","PFBS","PFOS","PFDS") & duration == 1) %>%
+  column_to_rownames("SRR")
+
+# reorder counts columns to match coldata rows exactly
+counts_subset <- markdups_counts_pfas_cleancols[, rownames(coldata)]
+
+# sanity check - this MUST be TRUE before running DESeq
+identical(colnames(counts_subset), rownames(coldata))
+
+dds <- DESeqDataSetFromMatrix(countData = counts_subset,
+                               colData = coldata,
+                               design = ~ chemical.y)
+dds <- DESeq(dds)
+
+res_PFOA <- results(dds, contrast = c("chemical.y", "PFOA", "DMSO"))
+```
+
+NEXT steps:
+- find best way to filter the counts for DESEQ
+- copy this file and find a way to save the graphs as a file organized in a folder

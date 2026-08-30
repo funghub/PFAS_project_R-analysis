@@ -1,0 +1,4 @@
+"0","# bind the water SRRs into SRR_PFAS"
+"0","SRR_water <- read.csv(""./data/data_input_deseq/metadata_ref/ref_water_metadata.csv"") %>%"
+"0","  select(-'replicate')"
+"0","head(SRR_water)"

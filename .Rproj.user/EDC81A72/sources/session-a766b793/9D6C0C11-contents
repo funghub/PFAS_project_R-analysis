@@ -1,0 +1,215 @@
+---
+title: "differential_expression"
+output: html_document
+date: "2026-06-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = here::here())
+knitr::opts_chunk$set(echo = TRUE)
+# set the root dir as [1] "/home/lawrence/Documents/School/thesis/PFAS_R-analysis"
+```
+
+```{r load_lib, message = FALSE}
+# Load additional libraries that might be useful (these may need to be installed)
+library(ggplot2)
+library(pheatmap)
+library(RColorBrewer)
+library(VennDiagram)
+library(gProfileR)
+
+# convert gene id to symbols
+library(org.Hs.eg.db)
+library(annotate)
+
+library(dplyr) # this is to load piping %>%
+select <- dplyr::select # this is to help with the conflict of select()
+
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+```
+
+Combine the SRR conversion tables from PFAS and Ref into a single one!
+- we can use this to rename the sample names in the future to add chemical, (not dosage), duration
+- this can validate whether we added the right chemicals and confirms if function to aggregate the samples and filter works in the clean_data....Rmd files!!!!!
+```{r}
+SRR_ref <- read.csv("./data/data_input_deseq/metadata_ref/ref_metadata_all.csv") %>%
+  select(-'replicate')#
+SRR_PFAS <- read.csv("./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv")
+```
+Append the two tables together
+```{r}
+SRR_all <- rbind(SRR_ref, SRR_PFAS)
+head(SRR_all)
+```
+
+## Retrieve the SRA Metadata csv
+Go to SRA run for the GEO dataset and click Metadata
+```{r}
+metadata_PFAS <- read.csv("./data/metadata/pfas/SraRunTable.csv", row.names = 1)
+metadata_ref <- read.csv("./data/metadata/ref/SraRunTable.csv", row.names = 1)
+```
+
+```{r}
+head(metadata_PFAS)
+head(metadata_ref)
+```
+
+Make a master metadata dataframe adding the information for duration and dose
+- but first, need to filter out those SRR in metadata_PFAS and metadata_ref for only duration == 1,10
+- then we combine those two metadata files but need to configure that metadata_PFAS have the same columns - will need to add back duration and dose to it to continue
+
+```{r}
+# make the master metadata dataframe
+
+```
+
+
+
+Verify the samples in 
+- ./data_input_deseq/PFASxControl
+- ./data_input_deseq/RefxControl
+are indeed the correct samples of that chemical from the index, comes from making the names
+
+create the deseq graphs for all combintations
+
+```{r load_data}
+# Lead the reference counts files for PFAS dataset
+markdups_counts_pfas <- read.table("./data/featureCounts/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
+raw_counts_pfas <- read.table("./data/featureCounts/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
+
+markdups_counts_ref <- read.table("./data/featureCounts/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
+raw_counts_ref <- read.table("./data/featureCounts/ref/raw_counts_ref.txt", header=TRUE, sep ="\t", row.names = 1)
+
+# raw_counts_ncbi_pfas <- read.table("featureCounts/ncbi_pipeline_counts/pfas/GSE144775_raw_counts_GRCh38.p13_NCBI.tsv", header=TRUE, sep = "\t")
+```
+
+```{r}
+# Replace everything after _ and the _ with nothing in all column names
+markdups_counts_pfas_cleancols <- markdups_counts_pfas %>%
+  rename_with(~gsub("_.*", "", .x)) %>% 
+  select(-c("Chr", "Start", "End", "Strand", "Length"))
+
+raw_counts_pfas_cleancols <- raw_counts_pfas %>% 
+  rename_with(~gsub("_.*", "", .x)) %>% 
+  select(-c("Chr", "Start", "End", "Strand", "Length"))
+
+markdups_counts_ref_cleancols <- markdups_counts_ref %>%
+  rename_with(~gsub("_.*", "", .x)) %>% 
+  select(-c("Chr", "Start", "End", "Strand", "Length"))
+
+raw_counts_ref_cleancols <- raw_counts_ref %>% 
+  rename_with(~gsub("_.*", "", .x)) %>% 
+  select(-c("Chr", "Start", "End", "Strand", "Length"))
+
+head(markdups_counts_pfas_cleancols)
+head(raw_counts_pfas_cleancols)
+
+head(markdups_counts_ref_cleancols)
+head(raw_counts_ref_cleancols)
+
+```
+
+
+
+Check if the column names are the same as metadata vs counts columns.
+DESeq need exact identical order?? (find where this say)
+```{r}
+identical(sort(colnames(markdups_counts_pfas_cleancols)), sort(rownames(metadata_PFAS))
+)
+
+length(colnames(markdups_counts_pfas_cleancols))
+length(rownames(metadata_PFAS))
+
+# sort(colnames(markdups_counts_pfas_cleancols)) == sort(rownames(metadata))
+```
+This confirms that my pipeline featurecounts contain the same samples as the metadata. Nothing more and nothing less.
+
+Now, we need to reorder the columns of featurecounts to be the same as rows in metadata
+"It is absolutely critical that the columns of the count matrix and the rows of the column data (information about samples) are in the same order. DESeq2 will not make guesses as to which column of the count matrix belongs to which row of the column data, these must be provided to DESeq2 already in consistent order."
+https://bioconductor.org/packages//release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#quick-start
+
+```{r}
+# markdups_counts_aligned <- markdups_counts_pfas_cleancols[, rownames(metadata)]
+
+markdups_counts_aligned <- markdups_counts_pfas_cleancols %>%
+  select(all_of(rownames(metadata_PFAS)))
+```
+
+```{r}
+head(metadata_PFAS)
+colnames(metadata_PFAS)
+```
+```{r}
+all(rownames(metadata_PFAS) %in% colnames(markdups_counts_aligned))
+
+# markdups_counts_aligned <- markdups_counts_aligned[, rownames(metadata)] # if necessary
+all(rownames(metadata_PFAS) == colnames(markdups_counts_aligned))
+
+```
+
+
+Create DESeq2 dataset
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = markdups_counts_aligned,
+  colData = metadata_PFAS,
+  design = ~ chemical
+)
+dds
+```
+
+DESeq2 recommends removing any gene with less than 10 reads across all samples
+https://rnabio.org/module-03-expression/0003/03/03/Differential_Expression-DESeq2/
+```{r}
+# Pre-filtering: Remove low count genes
+dds <- dds[rowSums(counts(dds)) > 10, ]
+```
+
+Running the differential expression pipeline
+https://master.bioconductor.org/packages/release/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html#differential-expression-analysis
+```{r}
+# running the differential expression pipeline
+dds <- DESeq(dds) 
+# extracts the estimated log2 fold changes and p values for the last variable in the design formula
+
+# build results table
+results <- results(dds)
+results <- results[order(results$padj), ]
+head(results)
+```
+Notes:
+Subset the samples
+filter out the NA
+compare the samples of diff substances
+
+Try to replicate the canada paper on their genes of focus.
+
+```{r}
+# PCA plot
+vsd <- vst(dds, blind = TRUE)  # Variance-stabilizing transformation
+plotPCA(vsd, intgroup = "chemical") # changed Condition to chemical to match metadata
+
+# subset the samples and then run it again!
+# try all samples with t-SNE to see if separate better
+
+# Heatmap of Sample Distances
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+```
+```{r}
+# Add significance column
+results$significant <- results$padj < 0.05 & abs(results$log2FoldChange) > 1
+
+# Volcano plot
+ggplot(results, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = "Log2 Fold Change", y = "-Log10 P-value")
+```
+Don't know what I'm looking at dds running it later and filtering. Need to figure out what is going on.
+
+Left off at https://rtguides.it.tufts.edu/bio/tutorials/de-seq2-in-r-ood.html
+

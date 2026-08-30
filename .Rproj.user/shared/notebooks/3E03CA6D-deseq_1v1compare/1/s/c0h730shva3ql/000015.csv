@@ -1,0 +1,9 @@
+"0","# EXAMPLE CODE to subset in the future simpler for faster deseq results"
+"0",""
+"0","# subset metadata to just this comparison group (or leave it broad if combining all chemicals)"
+"0","coldata <- GSMtoSRR %>% "
+"0","  filter(chemical.y %in% c(""DMSO"",""PFOA"",""PFBS"",""PFOS"",""PFDS"") & duration == 1) %>%"
+"0","  column_to_rownames(""SRR"")"
+"2","Error in column_to_rownames(., ""SRR"") : 
+  could not find function ""column_to_rownames""
+"
