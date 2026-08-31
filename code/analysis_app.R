@@ -262,7 +262,7 @@ print("Default DESeq design: ~ chemical + duration")
 
 # SECOND function
 run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chosen,
-                               metadata_all, markdups_counts_all, design_formula) {
+                               metadata_all, markdups_counts_all, design_txt) {
   
   # combine chemicals_chosen and controls_chosen
   chemicals_and_controls_chosen <- c(chemicals_chosen, controls_chosen)
@@ -361,7 +361,7 @@ server <- function(input, output, session) {
   # design_use <- as.formula(design_txt)
 
   analysis <- eventReactive(input$run, {
-    req(input$chemicals, input$controls, input$durations)
+    req(input$chemicals, input$controls, input$durations, input$design_terms)
     terms <- input$design_terms
     terms <- c(setdiff(terms, "chemical"), "chemical") # must put chemical last so results() is the chemical contrast
     #Note: In order to benefit from the default settings of the package, you should put the variable of interest at the end of the formula and make sure the control level is the first level
@@ -376,10 +376,12 @@ server <- function(input, output, session) {
   })
 
   output$pca_plot <- renderPlot({
+    req(analysis()$vsd) # make sure analysis() is not NULL and has run
     plotPCA(analysis()$vsd, intgroup = "chemical")
   })
 
   output$volcano_plot <- renderPlot({
+    req(analysis()$results) # make sure analysis() is not NULL and has run
     res_df <- as.data.frame(analysis()$results)
     ggplot(res_df, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
       geom_point() +
@@ -388,6 +390,7 @@ server <- function(input, output, session) {
   })
 
   output$top_genes <- renderTable({
+    req(analysis()$results) # make sure analysis() is not NULL and has run
     as.data.frame(head(analysis()$results, 20))
   }, rownames = TRUE)
 }
