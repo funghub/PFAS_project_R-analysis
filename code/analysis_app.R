@@ -22,7 +22,9 @@ count <- dplyr::count
 library(DESeq2)
 library(ggplot2)
 library(pheatmap)
+
 library(shiny)
+library(zip)
 
 setwd(here::here())
 
@@ -329,7 +331,7 @@ ui <- fluidPage(
     sidebarPanel(
       selectInput("chemicals", "Chemical(s):",
                   choices = c(REF_CHEMICALS, PFAS_CHEMICALS),
-                  multiple = TRUE, selected = "PFOA"),
+                  multiple = TRUE, selected = "PFBS"),
       selectInput("controls", "Control:",
                   choices = CONTROLS, selected = "DMSO_pfas"),
       checkboxGroupInput("durations", "Duration(s):",
@@ -338,17 +340,20 @@ ui <- fluidPage(
                          paste("DESeq design (default: chemical + duration);",
                          "include duration if you selected all durations"),
                          choices = c("chemical", "duration", "dose"),
-                         selected = c("chemical", "duration")),
-      actionButton("run", "Run DESeq2")
+                         selected = c("chemical", "duration")
+                         ),
+      actionButton("run", "Run DESeq2"),
+      hr(), # Horizontal dividing line
+      downloadButton("download_data", "Download All Results & Plots (.zip)")
     ),
     mainPanel(
       plotOutput("pca_plot"),
       plotOutput("volcano_plot"),
-      tableOutput("top_genes")
+      tableOutput("top_genes"),
+      plotOutput("heatmap")
     )
   )
 )
-
 
 server <- function(input, output, session) {
 
@@ -393,7 +398,89 @@ server <- function(input, output, session) {
     req(analysis()$results) # make sure analysis() is not NULL and has run
     as.data.frame(head(analysis()$results, 20))
   }, rownames = TRUE)
+  
+  output$heatmap <- renderPlot({
+    res <- analysis()
+    req(res$vsd)
+    # Heatmap of Sample Distances
+    sampleDists <- dist(t(assay(vsd)))
+    sampleDistMatrix <- as.matrix(sampleDists)
+    pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+  })
+  
+  
+  # Download handler for ZIP bundle
+  output$download_data <- downloadHandler(
+    filename = function() {
+      paste0(paste("DESeq2_analysis_results", 
+            Sys.Date(), 
+            paste(input$chemicals, collapse = "_"), 
+            paste(input$controls, collapse = "_"), 
+            paste(input$durations, collapse = "_"), 
+            paste(input$design_terms, collapse = "_"), 
+            sep = "-"), ".zip")
+    },
+    content = function(file) {
+      res <- analysis() # takes results from earlier deseq analysis
+      req(res$vsd, res$results) # make sure we have analysis results first
+      
+      tmpdir <- tempdir() # path to temp folder by R
+      owd <- setwd(tmpdir) # switches wd to that temporary for all generated things
+                            # ALSO returns the prev wd = app dir
+      on.exit(setwd(owd)) # when exit, set wd back to original working folder
+                          # takes that app dir returned before
+      
+      files_to_zip <- c() # compile list of files to zip
+      
+      # 1. Full DESeq2 Results (CSV)
+      res_df <- as.data.frame(res$results)
+      csv_file <- "deseq2_results.csv"
+      write.csv(res_df, csv_file, row.names = TRUE)
+      files_to_zip <- c(files_to_zip, csv_file)
+      
+      # 2. Top 20 Genes (CSV)
+      top_csv_file <- "top_20_genes.csv"
+      write.csv(head(res_df, 20), top_csv_file, row.names = TRUE)
+      files_to_zip <- c(files_to_zip, top_csv_file)
+      
+      # 3. PCA Plot (PNG)
+      pca_file <- "pca_plot.png"
+      png(pca_file, width = 800, height = 600, res = 120)
+      print(plotPCA(res$vsd, intgroup = "chemical"))
+      dev.off() # write the image file
+      files_to_zip <- c(files_to_zip, pca_file)
+      
+      # 4. Volcano Plot (PNG)
+      if (!"significant" %in% colnames(res_df)) {
+        # Evaluates each gene's adjusted p-value (FDR)
+        # return TRUE for genes stat threshold FDR<0.05 & magnitude of expression
+        res_df$significant <- res_df$padj < 0.05 & abs(res_df$log2FoldChange) > 1
+      }
+      p_volcano <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
+        geom_point(alpha = 0.6) +
+        theme_minimal() +
+        labs(x = "Log2 Fold Change", y = "-Log10 P-value")
+      
+      volcano_file <- "volcano_plot.png"
+      ggsave(volcano_file, plot = p_volcano, width = 7, height = 5, dpi = 300)
+      files_to_zip <- c(files_to_zip, volcano_file)
+      
+      # 5. Distance Heatmap (PNG)
+      heatmap_file <- "sample_distance_heatmap.png"
+      sampleDists <- dist(t(assay(res$vsd)))
+      sampleDistMatrix <- as.matrix(sampleDists)
+      
+      png(heatmap_file, width = 800, height = 800, res = 120)
+      pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+      dev.off()
+      files_to_zip <- c(files_to_zip, heatmap_file)
+      
+      # Zip everything together
+      zip::zipr(zipfile = file, files = files_to_zip)
+    }
+  )
 }
+
 
 
 shinyApp(ui, server) 

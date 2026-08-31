@@ -87,13 +87,15 @@ setdiff(colnames(metadata_ref),colnames(metadata_PFAS_final))
 metadata_ref_final <- metadata_ref %>%
   select(-c('cell_line','Collection_Date','geo_loc_name_country','geo_loc_name_country_continent','geo_loc_name','replicate')) %>%
   mutate(timepoint = as.numeric(sub("d", "", sub("24h", "1", metadata_ref$timepoint)))) %>%
-  rename('duration' = 'timepoint')
+  rename('duration' = 'timepoint') %>%
+  mutate(chemical = ifelse(chemical == "DMSO", "DMSO_ref", chemical))
 
 # put dose,timepoint into metadata_PFAS_final (from SRR_all)
 # merge dose and timepoint by SRR
 metadata_PFAS_final_merged <- merge(metadata_PFAS_final, SRR_PFAS, by='SRR', all=TRUE) %>%
   mutate(chemical = chemical.y) %>% # this so that we only have one chemical col (will be used by DESeq)
-  select(!chemical.y)
+  select(!chemical.y) %>%
+  mutate(chemical = ifelse(chemical == "DMSO", "DMSO_pfas", chemical))
 
 ncol(metadata_PFAS_final)
 ncol(SRR_PFAS)
@@ -165,7 +167,7 @@ head(metadata_markdups)
 
 # validate duration is 1 and chemical are both those
 unique(metadata_markdups$duration) == 1
-unique(metadata_markdups$chemical) == c("DMSO","PFBS")
+unique(metadata_markdups$chemical) == c("DMSO_pfas","PFBS")
 ```
 Check if the column names are the same as metadata vs counts columns.
 DESeq need exact identical order?? (find where this say)
@@ -245,8 +247,8 @@ It's not asking "does PFBS at a specific dose differ from DMSO,"
 dds <- DESeqDataSetFromMatrix(
   countData = markdups_counts_aligned, # sample gene counts unnormalized
   colData = metadata_markdups, # metadata info about samples
-  # design = ~ chemical
-  design = ~ chemical + duration
+  design = ~ chemical
+  # design = ~ chemical + duration # only works if have all durations?
 )
 dds
 ```
@@ -255,7 +257,6 @@ table(metadata_markdups$chemical, metadata_markdups$duration)
 ```
 
 ANY OTHERING filtering????
-
 ```{r}
 head(metadata_markdups)
 unique(metadata_markdups$chemical)
