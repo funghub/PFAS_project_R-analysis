@@ -365,11 +365,12 @@ server <- function(input, output, session) {
   # design_txt <- paste("~", paste(terms, collapse = " + "))
   # design_use <- as.formula(design_txt)
 
+  # Run the DESeq2 analysis, but make sure user has selected all the necessary inputs in eventReactive()
   analysis <- eventReactive(input$run, {
     req(input$chemicals, input$controls, input$durations, input$design_terms)
     terms <- input$design_terms
     terms <- c(setdiff(terms, "chemical"), "chemical") # must put chemical last so results() is the chemical contrast
-    #Note: In order to benefit from the default settings of the package, you should put the variable of interest at the end of the formula and make sure the control level is the first level
+    # Note: In order to benefit from the default settings of the package, you should put the variable of interest at the end of the formula and make sure the control level is the first level
     run_deseq_analysis(
       chemicals_chosen   = input$chemicals,
       controls_chosen    = input$controls,
@@ -380,11 +381,13 @@ server <- function(input, output, session) {
     )
   })
 
+  # 3. PCA Plot
   output$pca_plot <- renderPlot({
     req(analysis()$vsd) # make sure analysis() is not NULL and has run
     plotPCA(analysis()$vsd, intgroup = "chemical")
   })
 
+  #  4. Volcano Plot
   output$volcano_plot <- renderPlot({
     req(analysis()$results) # make sure analysis() is not NULL and has run
     res_df <- as.data.frame(analysis()$results)
@@ -394,16 +397,18 @@ server <- function(input, output, session) {
       labs(x = "Log2 Fold Change", y = "-Log10 P-value")
   })
 
+  # 1. Full DESeq2 Results -> 2. Top 20 Genes
   output$top_genes <- renderTable({
     req(analysis()$results) # make sure analysis() is not NULL and has run
     as.data.frame(head(analysis()$results, 20))
   }, rownames = TRUE)
   
+  # 5. Distance Heatmap
   output$heatmap <- renderPlot({
     res <- analysis()
     req(res$vsd)
     # Heatmap of Sample Distances
-    sampleDists <- dist(t(assay(vsd)))
+    sampleDists <- dist(t(assay(res$vsd)))
     sampleDistMatrix <- as.matrix(sampleDists)
     pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
   })
