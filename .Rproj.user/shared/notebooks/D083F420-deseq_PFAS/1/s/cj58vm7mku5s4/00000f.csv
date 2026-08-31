@@ -1,2 +1,0 @@
-"0","metadata_PFAS <- read.csv(""./data/metadata/pfas/SraRunTable.csv"")"
-"0","# metadata_ref <- read.csv(""./data/metadata/ref/SraRunTable.csv"", row.names = 1)"

@@ -1,3 +1,0 @@
-"0","# SRR_ref <- read.csv(""./data/data_input_deseq/metadata_ref/ref_metadata_all.csv"") %>%"
-"0","  # select(-'replicate')#"
-"0","SRR_PFAS <- read.csv(""./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv"") # this is unfiltered duration"

@@ -1,1 +1,0 @@
-{"frames":[{"func":"GSMtoSRR %>% filter(chemical.y %in% c(\"DMSO\", \"PFOA\", \"PFBS\", \n    \"PFOS\", \"PFDS\") & duration == 1) %>% column_to_rownames(\"SRR\")","file":"","line_number":0,"end_line_number":0,"character_number":0,"end_character_number":0}],"message":"Error in column_to_rownames(., \"SRR\") : \n  could not find function \"column_to_rownames\"\n"}

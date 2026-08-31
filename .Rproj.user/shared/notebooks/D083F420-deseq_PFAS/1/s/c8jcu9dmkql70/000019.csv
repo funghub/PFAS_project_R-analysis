@@ -1,4 +1,0 @@
-"0","# Filter metadata to only have duration = 1"
-"0","metadata_PFAS_filtered_joined_test <- metadata_PFAS_filtered_joined %>%"
-"0","  filter(duration == 1)"
-"0","head(metadata_PFAS_filtered_joined_test)"

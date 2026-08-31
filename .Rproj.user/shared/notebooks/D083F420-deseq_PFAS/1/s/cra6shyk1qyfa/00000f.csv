@@ -1,2 +1,0 @@
-"0","raw_ref_counts_water <- read.csv(""./data/data_input_deseq/water_ref/raw_counts_water.csv"",row.names = 1)"
-"0","markdups_ref_counts_water <- read.csv(""./data/data_input_deseq/water_ref/markdups_counts_water.csv"",row.names = 1)"

@@ -1,3 +1,0 @@
-"0","# PCA plot"
-"0","vsd <- vst(dds, blind = TRUE)  # Variance-stabilizing transformation"
-"0","plotPCA(vsd, intgroup = ""chemical"") # changed Condition to chemical to match metadata"

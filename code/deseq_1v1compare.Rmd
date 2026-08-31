@@ -234,15 +234,26 @@ unique(metadata_markdups$Instrument)
 markdups_counts_aligned, metadata_markdups
 USE these two for DESeq!!!
 
-Create DESeq2 dataset
+### Create DESeq2 dataset
+design = ~ chemical + duration
+
+tests exactly your question: is there a significant difference in expression between PFBS and DMSO, with duration's effect on expression accounted for/adjusted out (since duration varies across both groups and would otherwise add noise to the comparison). Dose stays out for the reason we covered — it's confounded with chemical since DMSO doesn't span a dose range.
+"does PFBS (averaged/pooled across whatever doses were tested) differ from DMSO?"
+It's not asking "does PFBS at a specific dose differ from DMSO,"
 ```{r}
+# dds = DESeqDataSet
 dds <- DESeqDataSetFromMatrix(
-  countData = markdups_counts_aligned,
-  colData = metadata_markdups,
-  design = ~ chemical
+  countData = markdups_counts_aligned, # sample gene counts unnormalized
+  colData = metadata_markdups, # metadata info about samples
+  # design = ~ chemical
+  design = ~ chemical + duration
 )
 dds
 ```
+```{r}
+table(metadata_markdups$chemical, metadata_markdups$duration)
+```
+
 ANY OTHERING filtering????
 
 ```{r}

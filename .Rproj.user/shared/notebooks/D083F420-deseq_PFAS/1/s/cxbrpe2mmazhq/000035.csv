@@ -1,4 +1,0 @@
-"0","metadata_PFAS_filtered_joined <- merge(metadata_PFAS_filtered, SRR_filtered, by = ""SRR"", all = TRUE) %>%"
-"0","  mutate(chemical = chemical.y) # this so that we only have one chemical col (will be used by DESeq)"
-"0",""
-"0","head(metadata_PFAS_filtered_joined)"

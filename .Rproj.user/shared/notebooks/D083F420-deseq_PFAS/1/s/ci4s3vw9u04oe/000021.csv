@@ -1,3 +1,0 @@
-"0","# SRR_all <- rbind(SRR_ref, SRR_PFAS)"
-"0","SRR_all <- rbind(SRR_PFAS, SRR_water)"
-"0","head(SRR_all)"

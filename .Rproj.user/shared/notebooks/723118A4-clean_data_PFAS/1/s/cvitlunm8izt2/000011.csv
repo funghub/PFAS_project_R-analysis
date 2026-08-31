@@ -1,3 +1,0 @@
-"0","options(scipen = 999) # tells R to strongly avoid scientific notation whenever a fixed-notation alternative is reasonably close"
-"0","unique_combos <- unique(gsm_titles[, c(""chemical"", ""dose"", ""duration"")])"
-"0","unique_combos[order(unique_combos$chemical, unique_combos$duration, unique_combos$dose), ]"

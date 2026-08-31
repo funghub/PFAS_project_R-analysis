@@ -307,6 +307,7 @@ dds <- DESeqDataSetFromMatrix(
   countData = markdups_counts_aligned,
   colData = metadata_PFAS_filtered_joined,
   design = ~ chemical
+  # design = ~ chemical + duration
 )
 dds
 ```

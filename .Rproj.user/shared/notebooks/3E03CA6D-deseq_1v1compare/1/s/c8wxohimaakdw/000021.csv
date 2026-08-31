@@ -1,5 +1,0 @@
-"0",""
-"0","metadata_markdups <- metadata_all %>%"
-"0","  filter(SRR %in% colnames(markdups_counts))"
-"0",""
-"0","head(metadata_markdups)"

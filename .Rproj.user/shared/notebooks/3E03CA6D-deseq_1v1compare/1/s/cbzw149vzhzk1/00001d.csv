@@ -1,8 +1,0 @@
-"0",""
-"0","# subset the samples and then run it again!"
-"0","# try all samples with t-SNE to see if separate better"
-"0",""
-"0","# Heatmap of Sample Distances"
-"0","sampleDists <- dist(t(assay(vsd)))"
-"0","sampleDistMatrix <- as.matrix(sampleDists)"
-"0","pheatmap(sampleDistMatrix, main = ""Sample Distance Heatmap"")"

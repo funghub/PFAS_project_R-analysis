@@ -1,4 +1,0 @@
-"0","# install.packages(""here"")"
-"0","knitr::opts_knit$set(root.dir = here::here())"
-"0","knitr::opts_chunk$set(echo = TRUE)"
-"0","# set the root dir as [1] ""/home/lawrence/Documents/School/thesis/PFAS_R-analysis"""
