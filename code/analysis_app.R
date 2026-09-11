@@ -530,7 +530,8 @@ server <- function(input, output, session) {
             paste(input$chemicals, collapse = "_"), 
             paste(input$controls, collapse = "_"), 
             paste(input$durations, collapse = "_"), 
-            paste(input$design_terms, collapse = "_"), 
+            paste(input$design_terms, collapse = "_"),
+            paste(input$dosages, collapse = "_"),
             sep = "-"), ".zip")
     },
     content = function(file) {
