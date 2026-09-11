@@ -1,0 +1,35 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+# install.packages("here")
+knitr::opts_knit$set(root.dir = here::here())
+knitr::opts_chunk$set(echo = TRUE)
+# set the root dir as [1] "/home/lawrence/Documents/School/thesis/PFAS_R-analysis"
+```
+
+```{r load_lib}
+# library(dplyr) # this is to load piping %>%
+
+# install.packages("tidyverse")
+library(tidyverse)
+
+library(tibble)  # for `rownames_to_column` and `column_to_rownames`
+```
+
+```{r}
+getwd()
+```
+```{r}
+metadata_all <- read.csv("data/data_input_deseq/metadata_all.csv")
+```
+
+```{r}
+head(metadata_all)
+```
+```{r}
+unique(metadata_all[,c("chemical","dose")])
+```
+

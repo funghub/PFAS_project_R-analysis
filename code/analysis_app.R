@@ -16,8 +16,6 @@ library(annotate)
 
 library(dplyr) # this is to load piping %>%
 library(tibble)  # for `rownames_to_column` and `column_to_rownames`
-select <- dplyr::select # this is to help with the conflict of select()
-count <- dplyr::count
 
 library(DESeq2)
 library(ggplot2)
@@ -25,6 +23,11 @@ library(pheatmap)
 
 library(shiny)
 library(zip)
+
+# DESeq2/S4Vectors and AnnotationDbi mask these; keep dplyr verbs
+select <- dplyr::select
+count <- dplyr::count
+rename <- dplyr::rename
 
 setwd(here::here())
 
@@ -264,15 +267,29 @@ print("Default DESeq design: ~ chemical + duration")
 
 # SECOND function
 run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chosen,
-                               metadata_all, markdups_counts_all, design_txt) {
+                               dosages_chosen,metadata_all, markdups_counts_all, 
+                               design_txt) {
   
   # combine chemicals_chosen and controls_chosen
+  # (in case a control was selected in chemicals_chosen)
+  all_controls <- unique(c(controls_chosen, CONTROLS))
   chemicals_and_controls_chosen <- c(chemicals_chosen, controls_chosen)
   
   # filter metadata_all to match chemicals_and_controls_chosen and duration_chosen
   metadata_all_filtered <- metadata_all %>%
     filter(chemical %in% chemicals_and_controls_chosen) %>%
-    filter(duration %in% duration_chosen)
+    filter(duration %in% duration_chosen) %>%
+    # run each row in metadata through these statements, keep if one of these true
+    filter(  
+        chemical %in% all_controls |               # Keep controls regardless of dose, even if control is in chemicals_chosen
+        # is.na(dose) |                                 # Safeguard: Keep any sample with a missing/NA dose value
+        "all" %in% dosages_chosen |                    # test chemicals_chosen, Keep all if "All" is checked
+        is.null(dosages_chosen) |                      # Keep all if input isn't rendered yet in UI
+        dose %in% as.numeric(dosages_chosen)           # if dosage selected, Match selected doses for those chemicals_chosen
+    )
+  # if comparing control with control, MUST select ALL in the dosages chosen, or else FMSO_pfas would be dropped
+  # b/c the dose is not NA, but 0, will fail second condition
+  
   rownames(metadata_all_filtered) <- metadata_all_filtered$sample_id
   
   # filter markdups_counts_all to match metadata_all_filtered
@@ -288,6 +305,11 @@ run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chose
     design = as.formula(design_txt)
   )
   
+  # specifying the reference level
+  #   so that comparisons will NOT be based on the alpha order of the levels
+  dds$chemical <- relevel(dds$chemical, ref = controls_chosen)
+  cat("Controls Chosen", controls_chosen)
+  
   # keep genes with at least smallestGroupSize reads in at least one sample
   smallestGroupSize <- min(count(metadata_all_filtered, chemical, dose)$n)
   keep <- rowSums(counts(dds) > 0) >= smallestGroupSize # lowest gene count to keep is 1
@@ -299,14 +321,32 @@ run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chose
   
   # create results table
   res <- results(dds)
-  res <- res[order(res$padj), ]
-  res$significant <- res$padj < 0.05 & abs(res$log2FoldChange) > 1
+  res <- res[order(res$padj), ] # order results based on adj p-vals
+  # compute the significance column T/F
+  res$significant <- res$padj < 0.05 & abs(res$log2FoldChange) > 1 # can change threshold
+  # MAKE THIS A possibility on shiny to edit these values interface sliderbar      
+  
+  # T/F those with small pval & logfold>1 == significant
+  print("Summary Result Table after deseq")
+  summary(res)
   
   vsd <- vst(dds, blind = TRUE) # Variance-stabilizing transformation
   # is this for the PCA plot? rplot can be used?
   
+  # Prep for LFC: Log fold change shrinkage for visualization and ranking
+  cat("resultsNames\n")
+  print(resultsNames(dds))
+  
+  # results table with shrunken LFC
+  # get the last item in vector for the comparison name
+  coef_name <- resultsNames(dds)[length(resultsNames(dds))]
+  resLFC <- lfcShrink(dds, coef=coef_name, type="apeglm")
+  # recompute the significance column T/F as did with res
+  resLFC$significant <- resLFC$padj < 0.05 & abs(resLFC$log2FoldChange) > 1
+  # T/F those with small pval & logfold>1 == significant
+  
   # return the dds, results, vsd, and metadata_all_filtered
-  list(dds = dds, results = res, vsd = vsd, metadata = metadata_all_filtered)
+  list(dds = dds, results = res, resultsLFC = resLFC, vsd = vsd, metadata = metadata_all_filtered)
 }
 
 
@@ -327,18 +367,27 @@ markdups_counts_all <- masters$markdups_counts_all
 
 ui <- fluidPage(
   titlePanel("PFAS / Reference Chemical DESeq2 Explorer"),
+  p("This interface only works for 1v1 comparisons. For example, adding more 
+    than 1 chemical will render the dosage selection useless because the chemicals
+    do not share the same range of dosages."),
+  
   sidebarLayout(
     sidebarPanel(
       selectInput("chemicals", "Chemical(s):",
-                  choices = c(REF_CHEMICALS, PFAS_CHEMICALS),
+                  choices = c(REF_CHEMICALS, PFAS_CHEMICALS,
+                              CONTROLS # add controls here so that we can compare DMSO vs water
+                              ),
                   multiple = TRUE, selected = "PFBS"),
       selectInput("controls", "Control:",
                   choices = CONTROLS, selected = "DMSO_pfas"),
       checkboxGroupInput("durations", "Duration(s):",
                           choices = DURATION_CHOICES, selected = c(1, 10)),
+      
+      uiOutput("dose_selector"), # sidebar for dosage
+      
       checkboxGroupInput("design_terms",
                          paste("DESeq design (default: chemical + duration);",
-                         "include duration if you selected all durations"),
+                         "include duration if you selected >1 durations"),
                          choices = c("chemical", "duration", "dose"),
                          selected = c("chemical", "duration")
                          ),
@@ -347,16 +396,57 @@ ui <- fluidPage(
       downloadButton("download_data", "Download All Results & Plots (.zip)")
     ),
     mainPanel(
+      h3("PCA Plot"),
       plotOutput("pca_plot"),
+      hr(),
+      
+      h3("Volcano Plot"),
       plotOutput("volcano_plot"),
+      hr(),
+      
+      h3("Top 20 Genes"),
       tableOutput("top_genes"),
-      plotOutput("heatmap")
+      hr(),
+      
+      h3("Top 20 Genes (Shrunken LFC)"),
+      tableOutput("top_genes_lfcShrink"),
+      hr(),
+      
+      h3("Sample Distance Heatmap"),
+      plotOutput("heatmap"),
+      hr(),
+      
+      h3("MA Plot"),
+      plotOutput("ma_plot")
     )
   )
 )
 
 server <- function(input, output, session) {
 
+  # dose selector slider bar dynamic with the selected chemicals
+  output$dose_selector <- renderUI({
+    req(input$chemicals)
+    
+    # Filter metadata for selected chemicals (excluding controls)
+    sub_meta <- metadata_all %>%
+      filter(chemical %in% input$chemicals, !is.na(dose), dose > 0)
+    
+    avail_doses <- sort(unique(sub_meta$dose)) # get the dosages for chemicals chosen
+    
+    if (length(avail_doses) == 0) {
+      return(NULL) # No dose variation present
+    }
+    
+    checkboxGroupInput(
+      inputId  = "dosages",
+      label    = "Select Dosage(s) in uM (Optional):",
+      choices  = c("All" = "all", avail_doses),
+      selected = "all" # Defaults to selecting all doses
+    )
+  })
+  
+  
   # terms <- input$design_terms # moved inside reactive
   # put chemical last so results() is the chemical contrast
   # terms <- c(setdiff(terms, "chemical"), "chemical") # moved this down to the run_deseq_analysis function
@@ -367,14 +457,19 @@ server <- function(input, output, session) {
 
   # Run the DESeq2 analysis, but make sure user has selected all the necessary inputs in eventReactive()
   analysis <- eventReactive(input$run, {
-    req(input$chemicals, input$controls, input$durations, input$design_terms)
+    req(input$chemicals, input$controls, input$durations, input$design_terms,
+        !any(input$chemicals %in% input$controls) # Ensures no overlap between chemical and control selections
+        )
     terms <- input$design_terms
     terms <- c(setdiff(terms, "chemical"), "chemical") # must put chemical last so results() is the chemical contrast
     # Note: In order to benefit from the default settings of the package, you should put the variable of interest at the end of the formula and make sure the control level is the first level
+    stopifnot("chemical" %in% terms)
+    
     run_deseq_analysis(
       chemicals_chosen   = input$chemicals,
       controls_chosen    = input$controls,
       duration_chosen    = as.numeric(input$durations),
+      dosages_chosen     = input$dosages,
       metadata_all        = metadata_all,
       markdups_counts_all = markdups_counts_all,
       design_txt = paste("~", paste(terms, collapse = " + "))
@@ -403,6 +498,13 @@ server <- function(input, output, session) {
     as.data.frame(head(analysis()$results, 20))
   }, rownames = TRUE)
   
+  
+  # 1.1. Full DESeq2 Results -> 2. Top 20 Genes - lfcShrink
+  output$top_genes_lfcShrink <- renderTable({
+    req(analysis()$resultsLFC) # make sure analysis() is not NULL and has run
+    as.data.frame(head(analysis()$resultsLFC, 20))
+  }, rownames = TRUE)
+  
   # 5. Distance Heatmap
   output$heatmap <- renderPlot({
     res <- analysis()
@@ -411,6 +513,12 @@ server <- function(input, output, session) {
     sampleDists <- dist(t(assay(res$vsd)))
     sampleDistMatrix <- as.matrix(sampleDists)
     pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+  })
+  
+  # 6. MA-Plot
+  output$ma_plot <- renderPlot({
+    req(analysis()) # make sure analysis() is not NULL and has run
+    plotMA(analysis()$resultsLFC, ylim=c(-2,2)) # WE USE LFC
   })
   
   
@@ -448,6 +556,18 @@ server <- function(input, output, session) {
       write.csv(head(res_df, 20), top_csv_file, row.names = TRUE)
       files_to_zip <- c(files_to_zip, top_csv_file)
       
+      # lfcShrink
+      # 1.1. Full DESeq2 Results (CSV) - lfcShrink
+      res_df <- as.data.frame(res$resultsLFC)
+      csv_file <- "deseq2_results-LFC.csv"
+      write.csv(res_df, csv_file, row.names = TRUE)
+      files_to_zip <- c(files_to_zip, csv_file)
+      
+      # 2.1. Top 20 Genes (CSV) - lfcShrink
+      top_csv_file <- "top_20_genes-LFC.csv"
+      write.csv(head(res_df, 20), top_csv_file, row.names = TRUE)
+      files_to_zip <- c(files_to_zip, top_csv_file)
+      
       # 3. PCA Plot (PNG)
       pca_file <- "pca_plot.png"
       png(pca_file, width = 800, height = 600, res = 120)
@@ -460,6 +580,8 @@ server <- function(input, output, session) {
         # Evaluates each gene's adjusted p-value (FDR)
         # return TRUE for genes stat threshold FDR<0.05 & magnitude of expression
         res_df$significant <- res_df$padj < 0.05 & abs(res_df$log2FoldChange) > 1
+# MAKE THIS A possibility on shiny to edit these values sliderbar      
+        
       }
       p_volcano <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
         geom_point(alpha = 0.6) +
@@ -479,6 +601,13 @@ server <- function(input, output, session) {
       pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
       dev.off()
       files_to_zip <- c(files_to_zip, heatmap_file)
+      
+      # 6. MA Plot (PNG)
+      ma_file <- "ma_plot.png"
+      png(ma_file, width = 800, height = 600, res = 120)
+      print(plotMA(analysis()$resultsLFC, ylim=c(-2,2)))
+      dev.off() # write the image file
+      files_to_zip <- c(files_to_zip, ma_file)
       
       # Zip everything together
       zip::zipr(zipfile = file, files = files_to_zip)

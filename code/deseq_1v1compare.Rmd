@@ -342,25 +342,25 @@ In the future:
 - make a master counts dataframe that has both samples from PFAS and refs
 
 ```{r}
-# EXAMPLE CODE to subset in the future simpler for faster deseq results
+## EXAMPLE CODE to subset in the future simpler for faster deseq results
 
-# subset metadata to just this comparison group (or leave it broad if combining all chemicals)
-coldata <- GSMtoSRR %>% 
-  filter(chemical.y %in% c("DMSO","PFOA","PFBS","PFOS","PFDS") & duration == 1) %>%
-  column_to_rownames("SRR")
+## subset metadata to just this comparison group (or leave it broad if combining all chemicals)
+# coldata <- GSMtoSRR %>% 
+#   filter(chemical.y %in% c("DMSO","PFOA","PFBS","PFOS","PFDS") & duration == 1) %>%
+#   column_to_rownames("SRR")
 
-# reorder counts columns to match coldata rows exactly
-counts_subset <- markdups_counts_pfas_cleancols[, rownames(coldata)]
+## reorder counts columns to match coldata rows exactly
+# counts_subset <- markdups_counts_pfas_cleancols[, rownames(coldata)]
 
-# sanity check - this MUST be TRUE before running DESeq
-identical(colnames(counts_subset), rownames(coldata))
+## sanity check - this MUST be TRUE before running DESeq
+# identical(colnames(counts_subset), rownames(coldata))
 
-dds <- DESeqDataSetFromMatrix(countData = counts_subset,
+# dds <- DESeqDataSetFromMatrix(countData = counts_subset,
                                colData = coldata,
                                design = ~ chemical.y)
-dds <- DESeq(dds)
+# dds <- DESeq(dds)
 
-res_PFOA <- results(dds, contrast = c("chemical.y", "PFOA", "DMSO"))
+# res_PFOA <- results(dds, contrast = c("chemical.y", "PFOA", "DMSO"))
 ```
 
 NEXT steps:
