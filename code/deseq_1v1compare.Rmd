@@ -80,6 +80,20 @@ setdiff(colnames(metadata_PFAS_final),colnames(metadata_ref))
 print('Whats in ref metadata, but not in PFAS metadata')
 setdiff(colnames(metadata_ref),colnames(metadata_PFAS_final))
 ```
+```{r}
+# see the number of replicates universal 4?
+colnames(metadata_ref)
+```
+```{r}
+head(metadata_ref)
+unique(metadata_ref$chemical)
+unique(metadata_ref$replicate)
+# unique(metadata_markdups$chemical)[2]
+
+# number of unique combos for chem, duration, dose
+count(metadata_ref, chemical, timepoint, dose)#, replicate)
+min(count(metadata_ref, chemical, timepoint, dose)$n)
+```
 
 
 ```{r}
@@ -303,6 +317,24 @@ results <- results(dds)
 results <- results[order(results$padj), ]
 head(results)
 ```
+```{r}
+coef_name <- resultsNames(dds)[length(resultsNames(dds))]
+resLFC <- lfcShrink(dds, coef=coef_name, type="apeglm")
+head(resLFC)
+```
+```{r}
+# Create Gene List for gsea based on results (not results lfc shrink)
+gene_list <- results$stat # extract the stat column
+names(gene_list) <- rownames(results) # add row names into this df gene_list
+gene_list <- gene_list[!is.na(gene_list)] # remove na stat rows
+rnk_df <- data.frame("SYMBOL" = names(gene_list), "STAT" = gene_list) %>%
+  arrange(desc(STAT))
+```
+```{r}
+head(rnk_df)
+sum(duplicated(rnk_df$SYMBOL))
+```
+
 Notes:
 Subset the samples
 filter out the NA

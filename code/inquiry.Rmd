@@ -32,4 +32,7 @@ head(metadata_all)
 ```{r}
 unique(metadata_all[,c("chemical","dose")])
 ```
+```{r}
+count(metadata_all,"chemical")
+```
 

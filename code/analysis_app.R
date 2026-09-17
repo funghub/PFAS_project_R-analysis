@@ -266,8 +266,10 @@ print("Default DESeq design: ~ chemical + duration")
 # controls_chosen <- c("DMSO_ref", "DMSO_pfas", "water")
 
 # SECOND function
-run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chosen,
-                               dosages_chosen,metadata_all, markdups_counts_all, 
+run_deseq_analysis <- function(chemicals_chosen,controls_chosen,duration_chosen,
+                               dosages_chosen,padj_value,log2fold_absolute,
+                               sort_deseq_res, sort_decreasing,
+                               metadata_all, markdups_counts_all, 
                                design_txt) {
   
   # combine chemicals_chosen and controls_chosen
@@ -321,10 +323,11 @@ run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chose
   
   # create results table
   res <- results(dds)
-  res <- res[order(res$padj), ] # order results based on adj p-vals
+  res <- res[order(res[[sort_deseq_res]], decreasing = sort_decreasing), ]
   # compute the significance column T/F
-  res$significant <- res$padj < 0.05 & abs(res$log2FoldChange) > 1 # can change threshold
-  # MAKE THIS A possibility on shiny to edit these values interface sliderbar      
+  # res$significant <- res$padj < 0.05 & abs(res$log2FoldChange) > 1 # can change threshold
+  res$significant <- res$padj < padj_value & abs(res$log2FoldChange) > log2fold_absolute # can change threshold
+  # THIS A possibility on shiny to edit these values interface slider bar
   
   # T/F those with small pval & logfold>1 == significant
   print("Summary Result Table after deseq")
@@ -341,12 +344,43 @@ run_deseq_analysis <- function(chemicals_chosen, controls_chosen, duration_chose
   # get the last item in vector for the comparison name
   coef_name <- resultsNames(dds)[length(resultsNames(dds))]
   resLFC <- lfcShrink(dds, coef=coef_name, type="apeglm")
+  # apeglm has no `stat`; skip sort if the radio column has stat included
+  if (sort_deseq_res %in% names(resLFC)) {
+    resLFC <- resLFC[order(resLFC[[sort_deseq_res]], decreasing = sort_decreasing), ]
+  }
   # recompute the significance column T/F as did with res
-  resLFC$significant <- resLFC$padj < 0.05 & abs(resLFC$log2FoldChange) > 1
+  # resLFC$significant <- resLFC$padj < 0.05 & abs(resLFC$log2FoldChange) > 1
+  resLFC$significant <- resLFC$padj < padj_value & abs(resLFC$log2FoldChange) > log2fold_absolute
   # T/F those with small pval & logfold>1 == significant
   
+  
+  # Create Gene List for gsea based on results (not results lfc shrink)
+  # gene_list <- res[[sort_deseq_res]] # extract the $stat column
+  metric <- if (sort_deseq_res %in% c("stat", "log2FoldChange")) {
+    sort_deseq_res
+    }  else {
+      "stat"
+    }
+  gene_list <- res[[metric]]
+  names(gene_list) <- rownames(res) # add row names into this df gene_list
+  gene_list <- gene_list[!is.na(gene_list)] # remove na stat rows
+  rnk_df <- data.frame("SYMBOL" = names(gene_list), "METRIC" = gene_list) %>%
+    arrange(desc(METRIC))
+  
+  print("Number of Duplicate Gene Symbols:")
+  print(sum(duplicated(rnk_df$SYMBOL)))# check if there are duplicates gene symbols
+  
+  
+  # GSEA https://www.youtube.com/watch?v=Mi6u4r0lJvo
+  # https://www.youtube.com/watch?v=Tm0LhciYxk8
+  # with gene list, you can run GSEA
+  # gse <- gseGO
+  
+  
+  
   # return the dds, results, vsd, and metadata_all_filtered
-  list(dds = dds, results = res, resultsLFC = resLFC, vsd = vsd, metadata = metadata_all_filtered)
+  list(dds = dds, results = res, resultsLFC = resLFC, vsd = vsd,
+       metadata = metadata_all_filtered, rank_genes = rnk_df)
 }
 
 
@@ -391,6 +425,29 @@ ui <- fluidPage(
                          choices = c("chemical", "duration", "dose"),
                          selected = c("chemical", "duration")
                          ),
+      
+      p("Select the threshold value to label genes TRUE for stat threshold 
+        , for example, FDR less than 0.05 & magnitude of expression greater than 1"),
+      
+      sliderInput("padj_val", "Adjusted P-values:",
+                  min = 0, max = 1,
+                  value = 0.05, step = 0.05),
+      
+      sliderInput("log2fold_abs", "Absolute Value Log2FoldChange:",
+                  min = 0, max = 20,
+                  value = 1, step = 0.50),
+      
+      # https://docs.gsea-msigdb.org/#GSEA/GSEA_User_Guide/#gseapreranked-page
+      p("Select the column and direction to sort the DESeq2 results table.\n
+        GSEA ranked lists use stat or log2FoldChange only (stat and descending by default).
+        *GSEA .rnk file will be descending only, regardless of option!*"),
+      radioButtons(inputId="sort_res", label="Sort the DESeq2 results by:", 
+                   choices=c("log2FoldChange","lfcSE","stat","pvalue","padj"), selected = "stat"),
+      radioButtons(inputId="sort_dir", label="Sort order:",
+                   choices=c("Descending" = "decreasing",
+                             "Ascending" = "ascending"),
+                   selected = "decreasing"),
+      
       actionButton("run", "Run DESeq2"),
       hr(), # Horizontal dividing line
       downloadButton("download_data", "Download All Results & Plots (.zip)")
@@ -417,7 +474,10 @@ ui <- fluidPage(
       hr(),
       
       h3("MA Plot"),
-      plotOutput("ma_plot")
+      plotOutput("ma_plot"),
+      
+      h3("Ranked Gene List"),
+      tableOutput("ranked_genes")
     )
   )
 )
@@ -458,6 +518,7 @@ server <- function(input, output, session) {
   # Run the DESeq2 analysis, but make sure user has selected all the necessary inputs in eventReactive()
   analysis <- eventReactive(input$run, {
     req(input$chemicals, input$controls, input$durations, input$design_terms,
+        input$padj_val, input$log2fold_abs, input$sort_res, input$sort_dir,
         !any(input$chemicals %in% input$controls) # Ensures no overlap between chemical and control selections
         )
     terms <- input$design_terms
@@ -470,6 +531,10 @@ server <- function(input, output, session) {
       controls_chosen    = input$controls,
       duration_chosen    = as.numeric(input$durations),
       dosages_chosen     = input$dosages,
+      padj_value         = input$padj_val,
+      log2fold_absolute  = input$log2fold_abs,
+      sort_deseq_res     = input$sort_res,
+      sort_decreasing    = input$sort_dir == "decreasing",
       metadata_all        = metadata_all,
       markdups_counts_all = markdups_counts_all,
       design_txt = paste("~", paste(terms, collapse = " + "))
@@ -520,6 +585,13 @@ server <- function(input, output, session) {
     req(analysis()) # make sure analysis() is not NULL and has run
     plotMA(analysis()$resultsLFC, ylim=c(-2,2)) # WE USE LFC
   })
+    
+  #7. Gene List for GSEA
+  output$ranked_genes <- renderTable({
+    req(analysis()$rank_genes) # make sure analysis() is not NULL and has run
+    as.data.frame(head(analysis()$rank_genes, 20))
+  }, rownames = TRUE)
+  
   
   
   # Download handler for ZIP bundle
@@ -532,6 +604,8 @@ server <- function(input, output, session) {
             paste(input$durations, collapse = "_"), 
             paste(input$design_terms, collapse = "_"),
             paste(input$dosages, collapse = "_"),
+            paste(input$sort_res, collapse = "_"),
+            paste(input$sort_dir, collapse = "_"),
             sep = "-"), ".zip")
     },
     content = function(file) {
@@ -580,9 +654,7 @@ server <- function(input, output, session) {
       if (!"significant" %in% colnames(res_df)) {
         # Evaluates each gene's adjusted p-value (FDR)
         # return TRUE for genes stat threshold FDR<0.05 & magnitude of expression
-        res_df$significant <- res_df$padj < 0.05 & abs(res_df$log2FoldChange) > 1
-# MAKE THIS A possibility on shiny to edit these values sliderbar      
-        
+        res_df$significant <- res_df$padj < input$padj_val & abs(res_df$log2FoldChange) > input$log2fold_abs
       }
       p_volcano <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
         geom_point(alpha = 0.6) +
@@ -609,6 +681,14 @@ server <- function(input, output, session) {
       print(plotMA(analysis()$resultsLFC, ylim=c(-2,2)))
       dev.off() # write the image file
       files_to_zip <- c(files_to_zip, ma_file)
+      
+      
+      #7. Gene List for GSEA
+      ranked_genes_file <- "deseq_ranked.rnk"
+      write.table(res$rank_genes, ranked_genes_file,
+                  sep = "\t", quote = FALSE,
+                  row.names = FALSE, col.names = FALSE)
+      files_to_zip <- c(files_to_zip, ranked_genes_file)
       
       # Zip everything together
       zip::zipr(zipfile = file, files = files_to_zip)
