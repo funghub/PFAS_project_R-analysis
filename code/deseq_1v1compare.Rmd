@@ -29,6 +29,13 @@ count <- dplyr::count
 library(DESeq2)
 library(ggplot2)
 library(pheatmap)
+
+
+# for PCA
+library(plotly)
+
+# library(fgsea)
+library(data.table)
 ```
 
 Combine the SRR conversion tables from PFAS and Ref into a single one!
@@ -152,6 +159,12 @@ NOW take the file from ./data/data_input_deseq/PFASxControl
 
 STOPPED HERE!!
 
+```{r}
+metadata_all %>%
+  filter(chemical == "DMSO_pfas") %>%
+  distinct(create_date)
+filter(metadata_all,metadata_all$chemical == "DMSO_pfas")
+```
 
 
 create the deseq graphs for all combinations
@@ -327,8 +340,7 @@ head(resLFC)
 gene_list <- results$stat # extract the stat column
 names(gene_list) <- rownames(results) # add row names into this df gene_list
 gene_list <- gene_list[!is.na(gene_list)] # remove na stat rows
-rnk_df <- data.frame("SYMBOL" = names(gene_list), "STAT" = gene_list) %>%
-  arrange(desc(STAT))
+rnk_df <- data.frame("SYMBOL" = names(gene_list), "STAT" = gene_list) %>% arrange(desc(STAT))
 ```
 ```{r}
 head(rnk_df)
@@ -372,6 +384,173 @@ Left off at https://rtguides.it.tufts.edu/bio/tutorials/de-seq2-in-r-ood.html
 In the future:
 - make a master metadata that has both metadata for PFAS and refs -> metadata_all (HERE)
 - make a master counts dataframe that has both samples from PFAS and refs
+```{r}
+pca_df <- plotPCA(vsd, intgroup = "chemical", returnData=TRUE)
+head(pca_df)
+colnames(pca_df)
+```
+```{r}
+# attr(pca_df)
+attributes(pca_df)
+attributes(pca_df)$percentVar
+round(attr(pca_df, "percentVar") *100)
+```
+
+```{r}
+percent_var <- round(attributes(pca_df)$percentVar*100)
+
+df_in_ggplot <- ggplot(data = pca_df, 
+                           aes(PC1, PC2, color = chemical)) + #, shape = Cell, text = name
+      geom_point(size = 2) + # adding data points
+      coord_fixed() + # fixing coordinates
+      xlab(paste0("PC1: ", percent_var[1],"% variance")) +
+      ylab(paste0("PC2: ", percent_var[2],"% variance"))
+    
+    # put the ggplot in a plotly wrapper to make interactive
+    ggplotly(df_in_ggplot)
+```
+```{r}
+df_in_ggplot <- ggplot(data = pca_df, 
+                           aes(PC1, PC2, color = chemical, text = name)) + #, shape = Cell, text = name
+      geom_point(size = 2) + # adding data points
+      coord_fixed() # fixing coordinates
+    
+    # put the ggplot in a plotly wrapper to make interactive
+    ggplotly(df_in_ggplot, tooltip = "text")
+```
+
+Finding the factor causing within-group separation (AI)
+```{r}
+pca_obj <- prcomp(t(assay(vsd)))
+pc_scores <- as.data.frame(pca_obj$x[, 1:5])  # top 5 PCs
+metadata <- as.data.frame(colData(vsd))
+
+# for categorical variables, use ANOVA
+# summary(aov(pc_scores$PC2 ~ metadata$batch))
+# 
+# for continuous variables (e.g. RIN score), use correlation
+# cor.test(pc_scores$PC2, metadata$RIN)
+```
+```{r}
+# 1. dose - most likely real driver of within-group variance
+cor.test(pc_scores$PC2, metadata$dose)
+
+# 2. sequencing depth
+cor.test(pc_scores$PC2, metadata$Bases)
+
+# 3. processing date as a coarse batch proxy
+metadata$batch_date <- as.Date(metadata$create_date)
+summary(aov(pc_scores$PC2 ~ metadata$batch_date))
+```
+
+
+```{r}
+p <- ggplot(pca_df
+            , aes(PC1, PC2, color = duration, text = name)) +
+  geom_point(size = 3) +
+  scale_color_viridis_c()
+ggplotly(p, tooltip = "text")
+```
+Exploring PCA
+https://www.geeksforgeeks.org/r-language/principal-component-analysis-with-r-programming/ 
+```{r}
+summary(pca_df)
+```
+Principal Component Loadings
+see the weights (loadings) of each variable in the principal components
+my_pca$rotation: Shows the loadings (coefficients) of the principal components.
+```{r}
+pca_df$rotation[1:5, 1:4]
+pca_df$x
+
+```
+```{r}
+head(pca_df)
+```
+
+Test MSigDB
+```{r}
+library(msigdbr)
+library(fgsea)
+```
+```{r}
+genesets <- msigdbr(species = "Homo sapiens", collection = "H")
+gs <- genesets # retrieve geneset from MSigdb
+genesets
+```
+
+Get pathways file
+```{r}
+pathways <- split(gs$gene_symbol, gs$gs_name)
+pathways %>% head() %>% lapply(head) # head of each line
+# head(pathways)
+
+```
+
+Get rank genes
+```{r}
+rnk_df
+```
+```{r}
+ranks_list <- tibble::deframe(rnk_df)
+head(ranks_list)
+```
+
+```{r}
+# ranks <- rank_to_stats(rnk_df) # this issue?
+```
+
+Running FGSEA
+```{r}
+table <- fgsea(pathways, ranks_list, minSize=15, maxSize=500)
+```
+```{r}
+head(table)
+```
+```{r}
+tbl <- as.data.frame(table)
+head(tbl)
+```
+```{r}
+tbl$leadingEdge <- vapply(tbl$leadingEdge, function(x) paste(x, collapse = ", "), character(1)) # show the genes nicely
+head(tbl[, c("pathway", "pval", "padj","log2err","ES", "NES", "size", "leadingEdge")], 30)
+```
+```{r}
+tbl_sort <- tbl[order(tbl$padj),]
+head(tbl_sort[, c("pathway", "pval", "padj","log2err","ES", "NES", "size", "leadingEdge")], 30)
+```
+```{r}
+ggplot(tbl, aes(reorder(pathway, NES), NES)) +
+      geom_col(aes(fill=padj<0.05)) +
+      coord_flip() +
+      labs(x="Pathway", y="Normalized Enrichment Score",
+           title="Hallmark pathways NES from GSEA") + 
+      theme_minimal()
+```
+
+```{r}
+tbl <- table # convert table to data frame
+tbl <- tbl[order(padj)] # sort by most significant first
+
+topPathwaysUp <- tbl[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- tbl[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+fgsea::plotGseaTable(pathways[topPathways], ranks_list, tbl, 
+              gseaParam=0.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 ## EXAMPLE CODE to subset in the future simpler for faster deseq results

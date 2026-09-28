@@ -24,6 +24,12 @@ library(pheatmap)
 library(shiny)
 library(zip)
 
+# for PCA
+library(plotly)
+
+library(fgsea)
+library(data.table)
+
 # DESeq2/S4Vectors and AnnotationDbi mask these; keep dplyr verbs
 select <- dplyr::select
 count <- dplyr::count
@@ -37,6 +43,40 @@ PFAS_CHEMICALS <- c("PFOA","PFBS","PFOS","PFDS")
 CONTROLS <- c("DMSO_ref", "DMSO_pfas", "water")
 DURATION_CHOICES <- c(1, 10, 4, 14)
 DEFAULT_DESIGN <- "~ chemical + duration"
+
+# GO BP gene sets from org.Hs.eg.db (direct annotations, symbols).
+# ponytail: not MSigDB Hallmark; upgrade is a GMT upload or msigdbr.
+go_bp_pathways <- NULL
+get_go_bp_pathways <- function() {
+  if (!is.null(go_bp_pathways)) return(go_bp_pathways)
+  go_tbl <- AnnotationDbi::toTable(org.Hs.egGO)
+  go_tbl <- go_tbl[go_tbl$Ontology == "BP", ]
+  eg_ids <- unique(go_tbl$gene_id)
+  eg2sym <- AnnotationDbi::mapIds(
+    org.Hs.eg.db, keys = eg_ids, column = "SYMBOL",
+    keytype = "ENTREZID", multiVals = "first"
+  )
+  go_tbl$symbol <- unname(eg2sym[go_tbl$gene_id])
+  go_tbl <- go_tbl[!is.na(go_tbl$symbol), ]
+  pathways <- lapply(split(go_tbl$symbol, go_tbl$go_id), unique)
+  n <- lengths(pathways)
+  pathways <- pathways[n >= 15 & n <= 500]
+  stopifnot(length(pathways) > 0)
+  go_bp_pathways <<- pathways
+  pathways
+}
+
+rank_to_stats <- function(rnk_df) {
+  # fgsea needs unique names; keep the strongest |metric| per symbol
+  rnk_df <- rnk_df %>%
+    dplyr::filter(!is.na(SYMBOL), !is.na(METRIC), SYMBOL != "") %>%
+    dplyr::group_by(SYMBOL) %>%
+    dplyr::slice_max(order_by = abs(METRIC), n = 1, with_ties = FALSE) %>%
+    dplyr::ungroup()
+  stats <- rnk_df$METRIC
+  names(stats) <- rnk_df$SYMBOL
+  sort(stats, decreasing = TRUE)
+}
 
 
 
@@ -356,12 +396,13 @@ run_deseq_analysis <- function(chemicals_chosen,controls_chosen,duration_chosen,
   
   # Create Gene List for gsea based on results (not results lfc shrink)
   # gene_list <- res[[sort_deseq_res]] # extract the $stat column
+  # Checks if the variable sort_deseq_res is set to either "stat"
   metric <- if (sort_deseq_res %in% c("stat", "log2FoldChange")) {
     sort_deseq_res
     }  else {
       "stat"
     }
-  gene_list <- res[[metric]]
+  gene_list <- res[[metric]] # Pulls out the column corresponding to metric
   names(gene_list) <- rownames(res) # add row names into this df gene_list
   gene_list <- gene_list[!is.na(gene_list)] # remove na stat rows
   rnk_df <- data.frame("SYMBOL" = names(gene_list), "METRIC" = gene_list) %>%
@@ -416,6 +457,8 @@ ui <- fluidPage(
                   choices = CONTROLS, selected = "DMSO_pfas"),
       checkboxGroupInput("durations", "Duration(s):",
                           choices = DURATION_CHOICES, selected = c(1, 10)),
+      p("If you choose one duration, you must unselect duration\" from DESeq 
+      design b/c one duration would not explain the variation in the data."),
       
       uiOutput("dose_selector"), # sidebar for dosage
       
@@ -450,34 +493,57 @@ ui <- fluidPage(
       
       actionButton("run", "Run DESeq2"),
       hr(), # Horizontal dividing line
-      downloadButton("download_data", "Download All Results & Plots (.zip)")
+      downloadButton("download_data", "Download All Results & Plots (.zip)"),
+      p("File name will be: DESeq2_analysis_results-{date}-{chemicals}-{controls}-{durations}-{designterms}-{dosages}-{sortresultsby}-{sortorder}.zip")
     ),
     mainPanel(
-      h3("PCA Plot"),
-      plotOutput("pca_plot"),
-      hr(),
-      
-      h3("Volcano Plot"),
-      plotOutput("volcano_plot"),
-      hr(),
-      
-      h3("Top 20 Genes"),
-      tableOutput("top_genes"),
-      hr(),
-      
-      h3("Top 20 Genes (Shrunken LFC)"),
-      tableOutput("top_genes_lfcShrink"),
-      hr(),
-      
-      h3("Sample Distance Heatmap"),
-      plotOutput("heatmap"),
-      hr(),
-      
-      h3("MA Plot"),
-      plotOutput("ma_plot"),
-      
-      h3("Ranked Gene List"),
-      tableOutput("ranked_genes")
+      tabsetPanel(
+        tabPanel(
+          "Plots & Tables",
+          h3("PCA Plot"),
+          plotOutput("pca_plot"),
+          hr(),
+          
+          h3("PCA Plot Interactive"),
+          p("Sample Names are: {chemical}-{duration}-{dose}-{unique replicate}"),
+          plotlyOutput("pca_plot_interactive"),
+          hr(),
+          
+          h3("Volcano Plot"),
+          plotOutput("volcano_plot"),
+          hr(),
+          
+          h3("Top 20 Genes"),
+          tableOutput("top_genes"),
+          hr(),
+          
+          h3("Top 20 Genes (Shrunken LFC)"),
+          tableOutput("top_genes_lfcShrink"),
+          hr(),
+          
+          h3("Sample Distance Heatmap"),
+          plotOutput("heatmap"),
+          hr(),
+          
+          h3("MA Plot"),
+          plotOutput("ma_plot"),
+          
+          h3("Ranked Gene List"),
+          tableOutput("ranked_genes")
+        ),
+        tabPanel(
+          "FGSEA Analysis",
+          h3("FGSEA Results"),
+          p("Runs after DESeq2. Ranked genes use stat or log2FoldChange (same as the .rnk file). Pathways are GO Biological Process from org.Hs.eg.db."),
+          actionButton("run_fgsea", "Run FGSEA"),
+          hr(),
+          h4("Top pathways"),
+          tableOutput("fgsea_table"),
+          hr(),
+          selectInput("fgsea_pathway", "Enrichment plot for pathway:", choices = NULL),
+          plotOutput("fgsea_plot")
+        )
+      )
     )
   )
 )
@@ -546,6 +612,27 @@ server <- function(input, output, session) {
     req(analysis()$vsd) # make sure analysis() is not NULL and has run
     plotPCA(analysis()$vsd, intgroup = "chemical")
   })
+  
+  # 3.2 PCA Plot Interactive
+  output$pca_plot_interactive <- renderPlotly({
+    req(analysis()$vsd) # make sure analysis() is not NULL and has run
+    
+    # just return the data.frame
+    pca_df <- plotPCA(analysis()$vsd, intgroup = "chemical", returnData=TRUE)
+    percent_var <- round(attributes(pca_df)$percentVar*100)
+    
+    # put the dataframe and use ggplot2 to plot the PCA
+    df_in_ggplot <- ggplot(data = pca_df, 
+                           aes(PC1, PC2, color = chemical, text = name)) +
+                           # aes(PC1, PC2, color = duration, text = name)) +
+      geom_point(size = 2) + # adding data points
+      coord_fixed() + # fixing coordinates
+      xlab(paste0("PC1: ", percent_var[1],"% variance")) +
+      ylab(paste0("PC2: ", percent_var[2],"% variance"))
+    
+    # put the ggplot in a plotly wrapper to make interactive
+    ggplotly(df_in_ggplot, tooltip = "text")
+  })
 
   #  4. Volcano Plot
   output$volcano_plot <- renderPlot({
@@ -574,7 +661,6 @@ server <- function(input, output, session) {
   output$heatmap <- renderPlot({
     res <- analysis()
     req(res$vsd)
-    # Heatmap of Sample Distances
     sampleDists <- dist(t(assay(res$vsd)))
     sampleDistMatrix <- as.matrix(sampleDists)
     pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
@@ -582,8 +668,8 @@ server <- function(input, output, session) {
   
   # 6. MA-Plot
   output$ma_plot <- renderPlot({
-    req(analysis()) # make sure analysis() is not NULL and has run
-    plotMA(analysis()$resultsLFC, ylim=c(-2,2)) # WE USE LFC
+    req(analysis())
+    plotMA(analysis()$resultsLFC, ylim = c(-2, 2))
   })
     
   #7. Gene List for GSEA
@@ -678,7 +764,7 @@ server <- function(input, output, session) {
       # 6. MA Plot (PNG)
       ma_file <- "ma_plot.png"
       png(ma_file, width = 800, height = 600, res = 120)
-      print(plotMA(analysis()$resultsLFC, ylim=c(-2,2)))
+      plotMA(res$resultsLFC, ylim = c(-2, 2))
       dev.off() # write the image file
       files_to_zip <- c(files_to_zip, ma_file)
       
@@ -689,6 +775,16 @@ server <- function(input, output, session) {
                   sep = "\t", quote = FALSE,
                   row.names = FALSE, col.names = FALSE)
       files_to_zip <- c(files_to_zip, ranked_genes_file)
+
+      if (!is.null(fgsea_run()) && nrow(fgsea_run()$table) > 0) {
+        fgsea_df <- as.data.frame(fgsea_run()$table)
+        fgsea_df$leadingEdge <- vapply(
+          fgsea_df$leadingEdge, function(x) paste(x, collapse = ","), character(1)
+        )
+        fgsea_file <- "fgsea_go_bp.csv"
+        write.csv(fgsea_df, fgsea_file, row.names = FALSE)
+        files_to_zip <- c(files_to_zip, fgsea_file)
+      }
       
       # Zip everything together
       zip::zipr(zipfile = file, files = files_to_zip)
