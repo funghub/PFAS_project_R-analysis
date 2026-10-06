@@ -1,0 +1,139 @@
+---
+title: "R Notebook"
+# output: html_notebook
+---
+
+Create index of names of ref and pfas reads from geo query
+```{r}
+library(GEOquery)
+```
+reference compound dataset is publicly available at the Gene Expression Omnibus under accession #GSE272576.
+
+Explore this data 
+datasets for PFOA, PFBS, PFOS, and PFDS = # GSE144775
+https://www.geeksforgeeks.org/r-language/how-to-show-code-but-hide-output-in-rmarkdown/ 
+```{r, message = FALSE}
+# this hides the messages of "GSM4296053 (595 of 609 entities)"
+
+gse_pfas <- getGEO("GSE144775", GSEMatrix = FALSE)
+gsm_list_pfas <- GSMList(gse_pfas)
+```
+```{r}
+# gsm_pfas # tells all information
+# gsm_list_pfas
+```
+
+In gsm_titles, pull out duration and concentration in the title into two columns append
+```{r}
+# make df of the names of samples GSM, then for that column, apply function to get the title in metadata
+gsm_titles_pfas <- data.frame(
+  GSM = names(gsm_list_pfas),
+  title = sapply(gsm_list_pfas, function(x) Meta(x)$title),
+  chemical = sub("^chemical: ","",sapply(gsm_list_pfas, function(x) Meta(x)$characteristics_ch1[1])),
+  duration = as.numeric(sub("^time point \\(days\\): ","",sapply(gsm_list_pfas, function(x) Meta(x)$characteristics_ch1[3]))), # days
+  # duration_full = sapply(gsm_list_pfas, function(x) Meta(x)$characteristics_ch1[3]),
+  dose = as.numeric(sub("^dose\\(um\\): ","",sapply(gsm_list_pfas, function(x) Meta(x)$characteristics_ch1[2]))), # (um)
+  replicate = "NA",
+  tsv_title = "NA",
+  # dose_full = sapply(gsm_list_pfas, function(x) Meta(x)$characteristics_ch1[2]),
+  stringsAsFactors = FALSE
+)
+
+# Meta(gsm_list_pfas[["GSM4295460"]])$title
+Meta(gsm_list_pfas[[5]])$characteristics_ch1
+# Meta(gsm_list_pfas[[5]])$characteristics_ch1[1]
+# sub("^chemical: ","",Meta(gsm_list_pfas[[5]])$characteristics_ch1[1])
+Meta(gsm_list_pfas[[5]]) # as example for one sample
+
+# if this not work wget, get parse!!
+
+tail(gsm_titles_pfas)
+```
+
+
+
+____________________________________________________________________________________________
+
+Now we do the same for the reference compounds
+reference compound dataset is publicly available at the Gene Expression Omnibus under accession #GSE272576.
+
+```{r, message = FALSE}
+# this hides the messages of "GSM4296053 (595 of 609 entities)"
+
+gse_ref <- getGEO("GSE272576", GSEMatrix = FALSE)
+gsm_list_ref <- GSMList(gse_ref)
+```
+```{r}
+# gsm_ref # tells all information
+# gsm_list_ref
+```
+
+In gsm_titles, pull out duration and concentration in the title into two columns append
+```{r}
+# make df of the names of samples GSM, then for that column, apply function to get the title in metadata
+gsm_titles_ref <- data.frame(
+  GSM = names(gsm_list_ref),
+  title = sapply(gsm_list_ref, function(x) Meta(x)$title),
+  chemical = sub("^chemical: ","",sapply(gsm_list_ref, function(x) Meta(x)$characteristics_ch1[2])),
+  duration = sapply(gsm_list_ref, function(x) {
+  val <- sub("^timepoint: ", "", Meta(x)$characteristics_ch1[4])
+    if (val == "24h") {
+      return(1)
+    } else {
+      return(as.numeric(sub("d$", "", val)))
+    }
+  }), # days
+  # duration_full = sapply(gsm_list_ref, function(x) Meta(x)$characteristics_ch1[3]),
+  dose = as.numeric(sub("^dose: ","",sapply(gsm_list_ref, function(x) Meta(x)$characteristics_ch1[3]))), # (um)
+    replicate = (sub("^replicate: ","",sapply(gsm_list_ref, function(x) Meta(x)$characteristics_ch1[5]))),
+  # dose_full = sapply(gsm_list_ref, function(x) Meta(x)$characteristics_ch1[2]),
+  tsv_title = sub(".*?(pool.*)", "\\1",sapply(gsm_list_ref, function(x) Meta(x)$title)),
+  stringsAsFactors = FALSE
+)
+
+# Meta(gsm_list_ref[["GSM4295460"]])$title
+Meta(gsm_list_ref[[5]])$characteristics_ch1
+# Meta(gsm_list_ref[[5]])$characteristics_ch1[1]
+# sub("^chemical: ","",Meta(gsm_list_ref[[5]])$characteristics_ch1[1])
+Meta(gsm_list_ref[[5]]) # just look at one sample for example
+
+# if this not work wget, get parse!!
+
+tail(gsm_titles_ref)
+```
+
+Create Ultimate index or Ultimate Metadata All
+
+Import the premade index from metadata with SRR
+```{r}
+metadata_all_from_deseq_analysis <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/data_input_deseq/metadata_all.csv",header=TRUE)
+
+colnames(metadata_all_from_deseq_analysis)[colnames(metadata_all_from_deseq_analysis) == 'Sample.Name'] <- 'GSM'
+```
+
+```{r}
+metadata_all_from_deseq_analysis
+```
+Create a master gsm_titles_all
+```{r}
+gsm_titles_all <- rbind(gsm_titles_pfas,gsm_titles_ref) # combine pfas and ref
+```
+Merge/Join the gsm_titles_all table by the GSM name with metadata_all_from_deseq_analysis
+```{r}
+ultimate_metadata_all <- merge(gsm_titles_all, metadata_all_from_deseq_analysis[,c("GSM","X")], by = "GSM", all.y = TRUE) # right join by the y or df2
+```
+```{r}
+ultimate_metadata_all
+```
+Write file as csv for ultimate_metadata_all
+```{r}
+write.csv(ultimate_metadata_all, file = "/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_analysis/ultimate_metadata_all.csv")
+```
+
+```{r}
+sum(is.na(ultimate_metadata_all$X))
+sum(is.na(ultimate_metadata_all$title))
+sum(is.na(ultimate_metadata_all$GSM))
+colSums(is.na(ultimate_metadata_all)) # across all columns
+```
+

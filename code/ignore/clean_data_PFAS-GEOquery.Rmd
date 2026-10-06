@@ -95,8 +95,8 @@ gse <- getGEO("GSE144775", GSEMatrix = FALSE)
 gsm_list <- GSMList(gse)
 ```
 ```{r}
-# gse # tells all information
-gse_list
+# gsm # tells all information
+# gsm_list shows all information
 ```
 
 In gsm_titles, pull out duration and concentration in the title into two columns append

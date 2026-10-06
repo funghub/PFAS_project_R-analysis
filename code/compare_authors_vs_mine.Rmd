@@ -1,0 +1,48 @@
+---
+title: "R Notebook"
+# output: html_notebook
+---
+
+Load my RAW featurecounts from MY PIPELINE
+
+PFAS Compounds
+```{r}
+bowtie_pfas <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/pfas/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+head(bowtie_pfas)
+```
+
+Ref Compounds
+```{r}
+bowtie_ref <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/ref/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+head(bowtie_ref)
+```
+
+
+Load my RAW? featurecounts from authors' pipeline
+PFAS Compounds
+```{r}
+author_pfas_d1 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD1.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d1)
+```
+```{r}
+author_pfas_d4 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD4.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d4)
+```
+```{r}
+author_pfas_d10 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD10.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d10)
+```
+```{r}
+author_pfas_d14 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD14.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d14)
+```
+
+Ref Compounds
+```{r}
+author_ref <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/ref/GSE272576_count_table.tsv", header=TRUE, sep = "\t", row.names = 1)
+head(author_ref)
+```
+
+Next steps:
+Run pipeline again? but use gene something in featurecounts??? so that I can actually count the probes, but wouldn't be useful for deseq or fgsea?-would crash hallmark
+1 GENE multiple probes
