@@ -30,8 +30,8 @@ GEO: # GSE144775
 SRA: PRJNA604830
 ```{r load_data}
 # Lead the reference counts files for PFAS dataset
-markdups_counts_pfas <- read.table("./data/featureCounts/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
-raw_counts_pfas <- read.table("./data/featureCounts/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
+markdups_counts_pfas <- read.table("./data/featureCounts/star_old/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
+raw_counts_pfas <- read.table("./data/featureCounts/star_old/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
 
 # raw_counts_ncbi_pfas <- read.table("featureCounts/ncbi_pipeline_counts/pfas/GSE144775_raw_counts_GRCh38.p13_NCBI.tsv", header=TRUE, sep = "\t")
 ```
@@ -94,6 +94,11 @@ https://www.geeksforgeeks.org/r-language/how-to-show-code-but-hide-output-in-rma
 gse <- getGEO("GSE144775", GSEMatrix = FALSE)
 gsm_list <- GSMList(gse)
 ```
+```{r}
+# gse # tells all information
+gse_list
+```
+
 In gsm_titles, pull out duration and concentration in the title into two columns append
 ```{r}
 # make df of the names of samples GSM, then for that column, apply function to get the title in metadata
@@ -190,8 +195,11 @@ Export the entire SRR table to csv to combine with the ref one in the future
 #   # filter(chemical == 'water') %>% 
 #   rename('chemical.y' = 'chemical', 'duration' = 'timepoint')
 
-dir.create("./data/data_input_deseq/metadata_PFAS", recursive = TRUE, showWarnings = FALSE)
-write.csv(GSMtoSRR,"./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv",row.names = FALSE)
+# uncommment
+# dir.create("./data/data_input_deseq/metadata_PFAS", recursive = TRUE, showWarnings = FALSE)
+
+# uncommment
+# write.csv(GSMtoSRR,"./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv",row.names = FALSE)
 ```
 
 
@@ -310,7 +318,9 @@ get_counts_comparison <- function(counts_file, control, chemical, time){
 10 day, water, PFAS
 ```{r}
 output_dir <- "./data/data_input_deseq/PFASxControl"
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+#uncomment
+# dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 durations <- c(1,10)
 PFAS <- c('PFOA','PFBS','PFOS','PFDS')
@@ -337,7 +347,8 @@ for (duration in durations) {
         # instead of save results as df, I save df as csv
         file_name <- paste0(chemical, "x", control, "_", duration, "_", counts_name, ".csv")
         
-        write.csv(tibble::rownames_to_column(result, "gene"),
+        #Uncomment
+        # write.csv(tibble::rownames_to_column(result, "gene"),
                   file = file.path(output_dir, file_name),
                   row.names = FALSE)
       }

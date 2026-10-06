@@ -182,7 +182,7 @@ build_masters <- function() {
   # CREATE the Master Counts File (PFAS dataset + Ref Dataset)
   
   ## Ref dataset counts
-  markdups_counts_ref <- read.table("./data/featureCounts/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
+  markdups_counts_ref <- read.table("./data/featureCounts/star_old/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
   
   ## Replace everything after _ and the _ with nothing in all column names
   markdups_counts_ref_cleancols <- markdups_counts_ref %>%
@@ -191,8 +191,8 @@ build_masters <- function() {
   
   ## PFAS dataset counts
   # Lead the reference counts files for PFAS dataset
-  markdups_counts_pfas <- read.table("./data/featureCounts/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
-  # raw_counts_pfas <- read.table("./data/featureCounts/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
+  markdups_counts_pfas <- read.table("./data/featureCounts/star_old/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
+  # raw_counts_pfas <- read.table("./data/featureCounts/star_old/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
   
   # Replace everything after _ and the _ with nothing in all column names
   markdups_counts_pfas_cleancols <- markdups_counts_pfas %>%
