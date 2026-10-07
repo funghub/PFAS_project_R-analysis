@@ -63,8 +63,8 @@ build_masters <- function() {
     rename('chemical.y' = 'chemical', 'duration' = 'timepoint')
   
   ## Export the entire SRR table to csv to combine with the PFAS one in the future
-  dir.create("./data/data_input_deseq/metadata_ref", recursive = TRUE, showWarnings = FALSE)
-  write.csv(SRR_table_ref,"./data/data_input_deseq/metadata_ref/ref_metadata_all.csv",row.names = FALSE)
+  dir.create("./results_from_analysis/data_input_deseq/metadata_ref", recursive = TRUE, showWarnings = FALSE)
+  write.csv(SRR_table_ref,"./results_from_analysis/data_input_deseq/metadata_ref/ref_metadata_all.csv",row.names = FALSE)
   
   ## Retrieve the SRA Metadata csv: PFAS dataset
   PFAS_metadata <- read.csv("data/metadata/pfas/SraRunTable.csv", row.names = 1)
@@ -120,8 +120,8 @@ build_masters <- function() {
   
   # Export the entire SRR table to csv to combine with the ref one in the future
   # - this is so that right before running DESeq, we can add chemical, duration, and dosage to the sample name for readability
-  dir.create("./data/data_input_deseq/metadata_PFAS", recursive = TRUE, showWarnings = FALSE)
-  write.csv(GSMtoSRR,"./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv",row.names = FALSE)
+  dir.create("./results_from_analysis/data_input_deseq/metadata_PFAS", recursive = TRUE, showWarnings = FALSE)
+  write.csv(GSMtoSRR,"./results_from_analysis/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv",row.names = FALSE)
   
   # Combine the SRR conversion tables from PFAS and Ref into a single one!
   # Append the two tables together to make a master index (currently just PFAS)
@@ -174,8 +174,8 @@ build_masters <- function() {
   # ref <- c("acetaminophen","aflatoxin B1","cyclosporin A","WY-14643","rosiglitazone","troglitazone","caffeine","sucrose","potassium chloride")
   
   
-  dir.create("./data/data_input_deseq", recursive = TRUE, showWarnings = FALSE)
-  write.csv(metadata_all, "./data/data_input_deseq/metadata_all.csv", row.names = FALSE)
+  dir.create("./results_from_analysis/data_input_deseq", recursive = TRUE, showWarnings = FALSE)
+  write.csv(metadata_all, "./results_from_analysis/data_input_deseq/metadata_all.csv", row.names = FALSE)
   
   
   
@@ -229,9 +229,9 @@ build_masters <- function() {
   print("metadata_all validate sample_id END")
   
   
-  write.csv(metadata_all, "./data/data_input_deseq/metadata_all.csv", row.names = TRUE)
+  write.csv(metadata_all, "./results_from_analysis/data_input_deseq/metadata_all.csv", row.names = TRUE)
   write.csv(tibble::rownames_to_column(raw_counts_all, "gene"),
-            "./data/data_input_deseq/raw_counts_all.csv", row.names = FALSE)
+            "./results_from_analysis/data_input_deseq/raw_counts_all.csv", row.names = FALSE)
   
   # validate on terminal
   cat('\nraw_counts_all #cols == metadata_all #rows\n')

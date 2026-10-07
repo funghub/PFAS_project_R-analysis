@@ -3,17 +3,18 @@ title: "R Notebook"
 # output: html_notebook
 ---
 
-Load my RAW featurecounts from MY PIPELINE
+Load my RAW featurecounts from MY PIPELINE for probe_names
+/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results/featurecounts
 
 PFAS Compounds
 ```{r}
-bowtie_pfas <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/pfas/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+bowtie_pfas <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
 head(bowtie_pfas)
 ```
 
 Ref Compounds
 ```{r}
-bowtie_ref <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/ref/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+bowtie_ref <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/ref/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
 head(bowtie_ref)
 ```
 
@@ -43,6 +44,18 @@ author_ref <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-an
 head(author_ref)
 ```
 
-Next steps:
+Next steps:DONE
 Run pipeline again? but use gene something in featurecounts??? so that I can actually count the probes, but wouldn't be useful for deseq or fgsea?-would crash hallmark
 1 GENE multiple probes
+
+
+Next Steps:
+- combine author_pfas_d1 + author_pfas_d4 + author_pfas_d10 + author_pfas_d14
+- change all sample names to unified naming that has the sample names
+
+Import Unified naming index
+```{r}
+unified_index <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/ultimate_metadata_all.csv", header=TRUE, row.names = 1)
+head(unified_index)
+```
+

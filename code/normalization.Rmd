@@ -11,3 +11,15 @@ Library for CPM?
 library(edgeR)
 ```
 
+```{r}
+# change to bowtie
+cts_pfas <- read.table("/home/lawrence/Documents/School/thesis/Results_from_pipeline/pfas/featurecounts/markdups_counts.txt", header = TRUE)
+cts_ref <- read.table("/home/lawrence/Documents/School/thesis/Results_from_pipeline/ref/featurecounts/markdups_counts.txt", header = TRUE)
+
+```
+
+Possibly check the exact normalization in DESEQ that ran
+- dds <- estimateSizeFactors(dds)
+- sizeFactors(dds)
+- normalized_counts <- counts(dds, normalized=TRUE)
+https://hbctraining.github.io/Intro-to-DGE-Quarto/lessons/05_DGE_count_normalization.html#count-normalization-of-mov10-dataset-using-deseq2
