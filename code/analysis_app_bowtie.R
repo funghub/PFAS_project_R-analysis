@@ -403,6 +403,7 @@ metadata_all <- masters$metadata_all
 raw_counts_all <- masters$raw_counts_all
 # raw_counts_all is a dataframe containing the counts for all samples
 
+# print(head(rownames(raw_counts_all))) #test
 
 # -------------------------------------------------------------
 # CREATING the UI
@@ -503,12 +504,29 @@ ui <- fluidPage(
           tableOutput("top_genes_lfcShrink"),
           hr(),
           
-          h3("Sample Distance Heatmap"),
-          plotOutput("heatmap"),
+          h3("Gene Expression Heatmap (selected genes vs samples)"),
+          textInput(
+            inputId = "genes_interested", 
+            label = "Enter Interested Genes from top pathways from GSEA or other (with comma with separator):", 
+            value = "ALL"
+          ),
+          textInput(
+            inputId = "samples_interested", 
+            label = "Enter Samples Interested if you have specific ones other for further filtering after deseq: (enter as DMSO_pfas-1d-0uM with comma sep)", 
+            value = "ALL"
+          ),
+          plotOutput("heatmap", height = "700px"),
+          hr(),
+          
+          h3("Gene Expression Heatmap: Significant Genes Only (genes vs samples)"),          textOutput("heatmap_significant_text"),
+          plotOutput("heatmap_significant",height = "700px"),
           hr(),
           
           h3("MA Plot"),
           plotOutput("ma_plot"),
+          
+          h3("Dispersion Plot"),
+          plotOutput("dispersion_plot"),
           
           h3("Ranked Gene List"),
           tableOutput("ranked_genes")
@@ -694,19 +712,142 @@ server <- function(input, output, session) {
     as.data.frame(head(LFCshrink_table, 20))
   }, rownames = TRUE)
   
-  # 5. Distance Heatmap
-  output$heatmap <- renderPlot({
-    res <- analysis()
-    req(res$vsd)
-    sampleDists <- dist(t(assay(res$vsd)))
-    sampleDistMatrix <- as.matrix(sampleDists)
-    pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+  
+  # create the filtered heatmap reactive function (no filtering significant genes)
+  heatmap_vsd_expression <- reactive({
+    
+    req(input$genes_interested, analysis()$vsd, input$samples_interested)
+    
+    #TEST
+    v <- assay(analysis()$vsd)
+    print(head(colnames(v), 50))
+    print(setdiff(trimws(strsplit(input$genes_interested, ",")[[1]]), rownames(v)))
+    print(setdiff(trimws(strsplit(input$samples_interested, ",")[[1]]), colnames(v)))
+    
+    
+    # parse the genes out from the text (account whitespaces, and comma as sep)
+    genes_no_white_spaces <-gsub(" ","",input$genes_interested)
+    samples_no_white_spaces <-gsub(" ","",input$samples_interested)
+    
+    vsd_expression <- assay(analysis()$vsd)
+    
+    if (genes_no_white_spaces != "ALL") {
+      # convert genes to vector
+      genes_vector <- strsplit(genes_no_white_spaces, ",")[[1]]
+      
+      # filtering the genes I want
+      vsd_expression <- vsd_expression[rownames(vsd_expression) %in% genes_vector, , drop = FALSE]
+      validate(need(nrow(vsd_expression) > 0, "None of the entered genes were found."))
+      
+      #TEST
+      print(dim(vsd_expression))
+      print(setdiff(genes_vector, rownames(assay(analysis()$vsd))))
+    }
+    
+    if (samples_no_white_spaces != "ALL") {
+      # filtering the samples I want, based on the entered by user
+      # convert genes to vector
+      samples_vector <- strsplit(samples_no_white_spaces, ",")[[1]]
+      sample_names_no_replicate <- sub("-[0-9]+$", "", colnames(vsd_expression))
+      vsd_expression <- vsd_expression[, colnames(vsd_expression) %in% samples_vector |
+                                         sample_names_no_replicate %in% samples_vector, drop = FALSE]
+      validate(need(ncol(vsd_expression) > 1, "Need at least 2 matching samples."))
+    }
+    print(dim(vsd_expression))
+    vsd_expression
   })
+  
+  # 5. Distance Heatmap (no filtering significant)
+  output$heatmap <- renderPlot({
+    vsd_expression <- heatmap_vsd_expression()
+
+    vsd_expression <- vsd_expression[apply(vsd_expression, 1, var) > 0, , drop = FALSE]
+    validate(need(nrow(vsd_expression) >= 1, "Selected genes have no variance across these samples."))
+    
+    pheatmap(vsd_expression,
+             scale = if (nrow(vsd_expression) > 1) "row" else "none", # if > 1 gene = centered/scaled row direction, else none
+             cluster_rows = nrow(vsd_expression) > 1, # >1 gene = cluster row
+             cluster_cols = ncol(vsd_expression) > 2, # >2 samples = cluster col
+             show_rownames = TRUE, show_colnames = TRUE,
+             main = "Selected genes (vst)")
+  })
+  
+  # 5.1 Distance Heatmap (Filtered vsd to remove )
+  # 2. Filter for significant genes (e.g., padj < 0.05 and absolute log2 fold change > 1)
+  # sig_genes <- rownames(subset(res, padj < 0.05 & abs(log2FoldChange) > 1))
+  # 3. Subset your VST matrix to ONLY include those significant genes
+  # mat <- assay(res$vsd)[sig_genes, ]
+  # reactive: vsd expression of significant genes only (all samples)
+  heatmap_vsd_expression_significant <- reactive({
+    req(analysis()$results, analysis()$vsd, input$genes_interested, input$samples_interested)  
+    res <- analysis()$results
+    vsd_expression <- assay(analysis()$vsd)
+    
+    # Filter for interested samples
+    samples_no_white_spaces <- gsub(" ", "", input$samples_interested)
+    if (samples_no_white_spaces != "ALL") {
+      samples_vector <- strsplit(samples_no_white_spaces, ",")[[1]]
+      
+      sample_names_no_replicate <- sub("-[0-9]+$", "", colnames(vsd_expression)) #combine all replictes
+      vsd_expression <- vsd_expression[, colnames(vsd_expression) %in% samples_vector | # match exact specific replicate
+                                         sample_names_no_replicate %in% samples_vector, drop = FALSE] # Match group basename and all its replicates
+      validate(need(ncol(vsd_expression) > 1,
+                    paste("Only", ncol(vsd_expression), "matching sample(s).")))
+    }
+    
+    # Filtering interested genes
+    sig_genes <- rownames(res)[which(res$significant)] # which() drops NA padj rows
+    validate(need(length(sig_genes) > 1, "Fewer than 2 significant genes at the chosen thresholds."))
+    
+    # Step 1: Keep only significant genes
+    vsd_expression <- vsd_expression[rownames(vsd_expression) %in% sig_genes, , drop = FALSE]
+    
+    # Step 2: FURTHER filter by user-typed genes (if not "ALL")
+    genes_no_white_spaces <- gsub(" ", "", input$genes_interested)
+    if (genes_no_white_spaces != "ALL") {
+      genes_vector <- strsplit(genes_no_white_spaces, ",")[[1]]
+      vsd_expression <- vsd_expression[rownames(vsd_expression) %in% genes_vector, , drop = FALSE]
+      validate(need(nrow(vsd_expression) > 0, "None of the entered genes were found among the significant genes."))
+    }
+    
+    
+    print(dim(vsd_expression))
+    vsd_expression
+  })
+  
+  
+  output$heatmap_significant_text <- renderText({
+    vsd_expression <- heatmap_vsd_expression_significant()
+    paste0("Filtered to ", nrow(vsd_expression), " significant genes (padj < ",
+           input$padj_val, " and |log2FoldChange| > ", input$log2fold_abs,
+           "), using the thresholds set when Run DESeq2 was clicked.")
+  })
+  
+  output$heatmap_significant <- renderPlot({
+    vsd_expression <- heatmap_vsd_expression_significant()
+    
+    vsd_expression <- vsd_expression[apply(vsd_expression, 1, var) > 0, , drop = FALSE]
+    validate(need(nrow(vsd_expression) >= 2, "Fewer than 2 significant genes with variance in these samples."))
+    
+    pheatmap(vsd_expression, scale = "row", # for each gene calculate z-score (mean expression gene used in z-score)
+             cluster_cols = ncol(vsd_expression) > 2,
+             show_rownames = nrow(vsd_expression) <= 60,
+             show_colnames = ncol(vsd_expression) <= 40,
+             main = paste0("Significant genes (vst, row z-score): ", nrow(vsd_expression), " genes"))
+    })
+  
   
   # 6. MA-Plot
   output$ma_plot <- renderPlot({
     req(analysis())
     plotMA(analysis()$resultsLFC, ylim = c(-2, 2))
+  })
+  
+  # 6.1 Dispersion Plot
+  output$dispersion_plot <- renderPlot({
+    req(analysis())
+    plotDispEsts(analysis()$dds)
+    # plotDispEsts(analysis()$dds,fitType = "local")
   })
   
   #7. Gene List for GSEA
@@ -818,7 +959,10 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       res <- analysis() # takes results from earlier deseq analysis
-      req(res$vsd, res$results) # make sure we have analysis results first
+      if (!isTruthy(input$run_fgsea)) {
+        showNotification("Run FGSEA first.", type = "error")
+      }
+      req(res$results, input$genes_interested, analysis()$vsd, input$samples_interested, fgsea_run()$table) # make sure we have analysis results first
       
       tmpdir <- tempdir() # path to temp folder by R
       owd <- setwd(tmpdir) # switches wd to that temporary for all generated things
@@ -833,6 +977,14 @@ server <- function(input, output, session) {
       csv_file <- "deseq2_results.csv"
       write.csv(res_df, csv_file, row.names = TRUE)
       files_to_zip <- c(files_to_zip, csv_file)
+      
+      
+      # VST results
+      vsd_df <- as.data.frame(assay(res$vsd))
+      csv_file <- "vsd_results.csv"
+      write.csv(vsd_df, csv_file, row.names = TRUE)
+      files_to_zip <- c(files_to_zip, csv_file)
+      
       
       # 2. Top 20 Genes (CSV)
       top_csv_file <- "top_20_genes.csv"
@@ -859,12 +1011,14 @@ server <- function(input, output, session) {
       files_to_zip <- c(files_to_zip, pca_file)
       
       # 4. Volcano Plot (PNG)
-      if (!"significant" %in% colnames(res_df)) {
-        # Evaluates each gene's adjusted p-value (FDR)
-        # return TRUE for genes stat threshold FDR<0.05 & magnitude of expression
-        res_df$significant <- res_df$padj < input$padj_val & abs(res_df$log2FoldChange) > input$log2fold_abs
-      }
-      p_volcano <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
+      # if (!"significant" %in% colnames(res_df)) {
+      #   # Evaluates each gene's adjusted p-value (FDR)
+      #   # return TRUE for genes stat threshold FDR<0.05 & magnitude of expression
+      #   res_df$significant <- res_df$padj < input$padj_val & abs(res_df$log2FoldChange) > input$log2fold_abs
+      # }
+      
+      res_df_volcano <- as.data.frame(res$results)
+      p_volcano <- ggplot(res_df_volcano, aes(x = log2FoldChange, y = -log10(pvalue), color = significant)) +
         geom_point(alpha = 0.6) +
         theme_minimal() +
         labs(x = "Log2 Fold Change", y = "-Log10 P-value")
@@ -873,15 +1027,59 @@ server <- function(input, output, session) {
       ggsave(volcano_file, plot = p_volcano, width = 7, height = 5, dpi = 300)
       files_to_zip <- c(files_to_zip, volcano_file)
       
-      # 5. Distance Heatmap (PNG)
-      heatmap_file <- "sample_distance_heatmap.png"
-      sampleDists <- dist(t(assay(res$vsd)))
+      # 5. Distance Heatmap ALL genes and samples (PNG)
+      heatmap_file <- "sample_all_gene_all_distance_heatmap.png"
+      sampleDists <- dist(t(assay(res$vsd)), method="euclidean")
       sampleDistMatrix <- as.matrix(sampleDists)
       
       png(heatmap_file, width = 800, height = 800, res = 120)
-      pheatmap(sampleDistMatrix, main = "Sample Distance Heatmap")
+      pheatmap(sampleDistMatrix, main = "Sample Distance All and Genes All Heatmap")
       dev.off()
       files_to_zip <- c(files_to_zip, heatmap_file)
+      
+      
+      # 5.1 Gene Expression Heatmap specific genes and samples (PNG)
+      heatmap_file_filtered <- "gene_sample_filtered_heatmap.png"
+      
+      vsd_expression <- heatmap_vsd_expression()
+      vsd_expression_filtered <- vsd_expression[apply(vsd_expression, 1, var) > 0, , drop = FALSE]
+      
+      png(heatmap_file_filtered, width = 800, height = 800, res = 120)
+      pheatmap(vsd_expression_filtered,
+               scale = if (nrow(vsd_expression_filtered) > 1) "row" else "none",
+               cluster_rows = nrow(vsd_expression_filtered) > 1,
+               cluster_cols = ncol(vsd_expression_filtered) > 2,
+               main = "Selected genes (vst)")
+      dev.off()
+      files_to_zip <- c(files_to_zip, heatmap_file_filtered)
+      
+      # 5.1 Gene Expression Heatmap specific genes and samples .csv (EXPORT the vst of filtered samples and genes)
+      csv_file <- "gene_sample_filtered_heatmap.csv"
+      write.csv(vsd_expression, csv_file, row.names = TRUE)
+      files_to_zip <- c(files_to_zip, csv_file)
+      
+      
+      # 5.3 Gene Expression Heatmap significant genes only (PNG + CSV)
+      vsd_expression_sig <- tryCatch(heatmap_vsd_expression_significant(), error = function(e) NULL)
+      
+      if (!is.null(vsd_expression_sig)) {
+        heatmap_file_significant <- "gene_sample_significant_heatmap.png"
+        vsd_expression_sig_filtered <- vsd_expression_sig[apply(vsd_expression_sig, 1, var) > 0, , drop = FALSE]
+        
+        png(heatmap_file_significant, width = 1000, height = 1000, res = 120)
+        pheatmap(vsd_expression_sig_filtered, scale = "row",
+                 cluster_cols = ncol(vsd_expression_sig_filtered) > 2,
+                 show_rownames = nrow(vsd_expression_sig_filtered) <= 60,
+                 show_colnames = ncol(vsd_expression_sig_filtered) <= 40,
+                 main = paste0("Significant genes (vst, row z-score): ", nrow(vsd_expression_sig_filtered), " genes"))
+        dev.off()
+        files_to_zip <- c(files_to_zip, heatmap_file_significant)
+        
+        csv_file <- "gene_sample_significant_heatmap.csv"
+        write.csv(vsd_expression_sig, csv_file, row.names = TRUE)
+        files_to_zip <- c(files_to_zip, csv_file)
+      }
+      
       
       # 6. MA Plot (PNG)
       ma_file <- "ma_plot.png"

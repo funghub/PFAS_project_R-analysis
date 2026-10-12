@@ -2,22 +2,32 @@
 title: "R Notebook"
 # output: html_notebook
 ---
+```{r}
+library(dplyr)
+library(pheatmap)
+```
+
 
 Load my RAW featurecounts from MY PIPELINE for probe_names
 /home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results/featurecounts
 
 PFAS Compounds
 ```{r}
-bowtie_pfas <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+                      select = -c(Chr,Start,End,Strand,Length)
+                      ) 
+bowtie_pfas <- bowtie_pfas %>% rename_with(~gsub("_.*", "", .x))
 head(bowtie_pfas)
 ```
 
 Ref Compounds
 ```{r}
-bowtie_ref <- read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/ref/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+bowtie_ref <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/ref/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+                      select = -c(Chr,Start,End,Strand,Length)
+                      ) 
+bowtie_ref <- bowtie_ref %>% rename_with(~gsub("_.*", "", .x))
 head(bowtie_ref)
 ```
-
 
 Load my RAW? featurecounts from authors' pipeline
 PFAS Compounds
@@ -37,6 +47,26 @@ head(author_pfas_d10)
 author_pfas_d14 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD14.txt", header=TRUE, sep = "\t", row.names = 1)
 head(author_pfas_d14)
 ```
+Combine all author's author_pfas_d# into one author_pfas
+```{r}
+author_pfas_d1 <- rownames_to_column(author_pfas_d1, var="gene")
+author_pfas_d4 <- rownames_to_column(author_pfas_d4, var="gene")
+author_pfas_d10 <- rownames_to_column(author_pfas_d10, var = "gene")
+author_pfas_d14 <- rownames_to_column(author_pfas_d14, var="gene")
+
+author_pfas <- author_pfas_d1 %>%
+  full_join(author_pfas_d4, by="gene") %>%
+  full_join(author_pfas_d10, by="gene") %>%
+  full_join(author_pfas_d14, by="gene") %>%
+  column_to_rownames(var="gene")
+
+head(author_pfas)
+# for some reason, the sample titles have duplicates and are not all unique across all durations, so .x was added in full_join
+```
+```{r}
+# check to see if there is NA, like one df had more genes/rows than another
+sum(is.na(author_pfas))
+```
 
 Ref Compounds
 ```{r}
@@ -44,18 +74,137 @@ author_ref <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-an
 head(author_ref)
 ```
 
-Next steps:DONE
-Run pipeline again? but use gene something in featurecounts??? so that I can actually count the probes, but wouldn't be useful for deseq or fgsea?-would crash hallmark
-1 GENE multiple probes
-
-
 Next Steps:
-- combine author_pfas_d1 + author_pfas_d4 + author_pfas_d10 + author_pfas_d14
 - change all sample names to unified naming that has the sample names
 
 Import Unified naming index
 ```{r}
 unified_index <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/ultimate_metadata_all.csv", header=TRUE, row.names = 1)
 head(unified_index)
+```
+Inquiring the sample titles/names of my unified one vs those in the count files
+```{r}
+#test pfas counts dataset
+filter(unified_index, unified_index$title == "DMSO0_465_S81_R1_001") # from the matrix file or from GEOquery
+filter(unified_index, unified_index$title == "DMSO_0.00017_661") # a sample from the count
+filter(unified_index, unified_index$title == "DMSO_0_468") # a sample from the count
+
+#test ref counts dataset
+filter(unified_index, unified_index$tsv_title == "pool1_S1") # a sample from the count
+```
+Unable to use the sample name from the count file for pfas in my unified index file
+- index only able to use on ref dataset
+
+
+
+author_pfas and author_ref
+& 
+bowtie_pfas and bowtie_ref
+- column name samples to unified sample names
+
+Bowtie featurecounts changing the sample names to unified naming
+```{r}
+# import the metadata file from analysis app
+metadata_all <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/data_input_deseq/metadata_all.csv") %>% column_to_rownames(var="X")
+```
+
+```{r}
+# changing sample names for bowtie_pfas
+metadata_all_pfas <- metadata_all[match(colnames(bowtie_pfas), metadata_all$SRR), ]
+stopifnot(identical(colnames(bowtie_pfas), metadata_all_pfas$SRR))
+
+sample_id <- make.unique(
+  paste(gsub(" ", "_", metadata_all_pfas$chemical), 
+        paste0(metadata_all_pfas$duration, "d"), 
+        paste0(metadata_all_pfas$dose,"uM"), #\u00b5M
+        sep = "-"),
+  sep = "-"
+)
+metadata_all_pfas$sample_id <- sample_id
+rownames(metadata_all_pfas) <- sample_id
+colnames(bowtie_pfas) <- sample_id
+
+
+
+# changing sample names for bowtie_ref
+metadata_all_ref <- metadata_all[match(colnames(bowtie_ref), metadata_all$SRR), ]
+stopifnot(identical(colnames(bowtie_ref), metadata_all_ref$SRR))
+
+sample_id <- make.unique(
+  paste(gsub(" ", "_", metadata_all_ref$chemical), 
+        paste0(metadata_all_ref$duration, "d"), 
+        paste0(metadata_all_ref$dose,"uM"), #\u00b5M
+        sep = "-"),
+  sep = "-"
+)
+metadata_all_ref$sample_id <- sample_id
+rownames(metadata_all_ref) <- sample_id
+colnames(bowtie_ref) <- sample_id
+```
+
+Author featurecounts changing the sample names to unified naming
+author_ref (author_pfas not able to use because of sample naming)
+```{r}
+head(colnames(author_ref))
+cat("TEST\n")
+tail(unified_index$tsv_title)
+```
+
+Rename author_ref with the unified titles
+```{r}
+author_metadata_ref <- unified_index[match(colnames(author_ref), unified_index$tsv_title), ]
+
+stopifnot(identical(colnames(author_ref), author_metadata_ref$tsv_title))
+
+rownames(author_metadata_ref) <- author_metadata_ref$title
+colnames(author_ref) <- author_metadata_ref$title
+
+```
+
+
+
+Creating the heatmap to compare author_ref and bowtie_ref
+```{r}
+
+# 1. Combine your two count matrices (e.g., author_ref and bowtie_ref) by gene rows
+# Ensure they share the exact same genes using a full_join or matching row names:
+common_genes <- intersect(rownames(author_ref), rownames(bowtie_ref))
+
+combined_counts <- cbind(
+  author_ref[common_genes, ],
+  bowtie_ref[common_genes, ]
+)
+
+# Optional: Log-transform or variance-stabilize counts first for better distance metrics (e.g., log2(counts + 1))
+log_counts <- log2(as.matrix(combined_counts) + 1)
+
+# 2. Transpose so samples are rows, then compute Euclidean distance between samples
+sample_dists <- dist(t(log_counts), method = "euclidean")
+sample_dist_matrix <- as.matrix(sample_dists)
+
+# 3. Plot the sample-to-sample distance heatmap
+pheatmap(
+  sample_dist_matrix,
+  clustering_distance_rows = sample_dists,
+  clustering_distance_cols = sample_dists,
+  main = "Sample Distance Heatmap (Euclidean)"
+)
+```
+
+See what probe_names dropped --> 0
+```{r}
+# Genes in author_ref but NOT in bowtie_ref
+only_in_author <- setdiff(rownames(author_ref), rownames(bowtie_ref))
+
+# Genes in bowtie_ref but NOT in author_ref
+only_in_bowtie <- setdiff(rownames(bowtie_ref), rownames(author_ref))
+
+# Check how many were dropped from each
+length(only_in_author)
+length(only_in_bowtie)
+
+# Peek at a few of them
+head(only_in_author)
+head(only_in_bowtie)
 ```
 
