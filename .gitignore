@@ -5,3 +5,4 @@ data/featureCounts
 results_analysis
 GSEA_LinuxIntel_4.4.0-WithJava
 results_from_analysis
+code/normalization.knit.md
