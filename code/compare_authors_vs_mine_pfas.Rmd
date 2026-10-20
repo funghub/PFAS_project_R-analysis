@@ -14,18 +14,38 @@ Load my RAW featurecounts from MY PIPELINE for probe_names
 
 PFAS Compounds
 ```{r}
-bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+# LOCAL version manifest v1.2
+bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas_manifest_v1.2/local/featurecounts_probenames/raw_local_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
                       select = -c(Chr,Start,End,Strand,Length)
-                      ) 
+                      )
+
+#END2END with manifest v2 (wrong?)
+# bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas/end2end/featurecounts_probenames/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+#                       select = -c(Chr,Start,End,Strand,Length)
+#                       ) 
+
+#END2END with manifest v1.2
+# bowtie_pfas <- subset(read.table("?????", header=TRUE, sep = "\t", row.names = 1),
+#                       select = -c(Chr,Start,End,Strand,Length)
+#                       ) 
+
+
 bowtie_pfas <- bowtie_pfas %>% rename_with(~gsub("_.*", "", .x))
 head(bowtie_pfas)
 ```
 
 Ref Compounds
 ```{r}
-bowtie_ref <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/ref/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+# LOCAL version
+
+# bowtie_ref <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/local/featurecounts_probenames/raw_local_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
+#                       select = -c(Chr,Start,End,Strand,Length)
+#                       ) 
+
+#END2END
+bowtie_ref <- subset(read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/end2end/featurecounts_probenames/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
                       select = -c(Chr,Start,End,Strand,Length)
-                      ) 
+                      )
 bowtie_ref <- bowtie_ref %>% rename_with(~gsub("_.*", "", .x))
 head(bowtie_ref)
 ```
