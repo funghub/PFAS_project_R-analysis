@@ -757,9 +757,18 @@ server <- function(input, output, session) {
     vsd_expression
   })
   
+  # combine all the replicates in the heatmap
+  average_replicates <- function(mat) {
+    groups <- sub("-[0-9]+$", "", colnames(mat)) # replace the replicate number
+    idx <- split(seq_along(groups), factor(groups, levels = unique(groups)))
+    do.call(cbind, lapply(idx, function(i) rowMeans(mat[, i, drop = FALSE])))
+  }
+  
   # 5. Distance Heatmap (no filtering significant)
   output$heatmap <- renderPlot({
     vsd_expression <- heatmap_vsd_expression()
+    
+    vsd_expression <- average_replicates(vsd_expression)   # NEW
 
     vsd_expression <- vsd_expression[apply(vsd_expression, 1, var) > 0, , drop = FALSE]
     validate(need(nrow(vsd_expression) >= 1, "Selected genes have no variance across these samples."))
@@ -769,7 +778,10 @@ server <- function(input, output, session) {
              cluster_rows = nrow(vsd_expression) > 1, # >1 gene = cluster row
              cluster_cols = ncol(vsd_expression) > 2, # >2 samples = cluster col
              show_rownames = TRUE, show_colnames = TRUE,
-             main = "Selected genes (vst)")
+             display_numbers = nrow(vsd_expression) <= 60, # TRUE # NEW
+             number_format = "%.1f",                        # NEW
+             fontsize_number = 7,                           # NEW
+             main = "Selected genes (vst, replicates averaged)")
   })
   
   # 5.1 Distance Heatmap (Filtered vsd to remove )
@@ -826,6 +838,8 @@ server <- function(input, output, session) {
   output$heatmap_significant <- renderPlot({
     vsd_expression <- heatmap_vsd_expression_significant()
     
+    vsd_expression <- average_replicates(vsd_expression)   # NEW
+    
     vsd_expression <- vsd_expression[apply(vsd_expression, 1, var) > 0, , drop = FALSE]
     validate(need(nrow(vsd_expression) >= 2, "Fewer than 2 significant genes with variance in these samples."))
     
@@ -833,6 +847,9 @@ server <- function(input, output, session) {
              cluster_cols = ncol(vsd_expression) > 2,
              show_rownames = nrow(vsd_expression) <= 60,
              show_colnames = ncol(vsd_expression) <= 40,
+             display_numbers = nrow(vsd_expression) <= 60,                    # NEW, when there are 60 or fewer genes number printed
+             number_format = "%.1f",                        # NEW
+             fontsize_number = 7,                           # NEW
              main = paste0("Significant genes (vst, row z-score): ", nrow(vsd_expression), " genes"))
     })
   

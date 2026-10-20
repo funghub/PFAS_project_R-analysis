@@ -40,12 +40,12 @@ Combine the SRR conversion tables from PFAS and Ref into a single one!
 ```{r}
 # SRR_ref <- read.csv("./data/data_input_deseq/metadata_ref/ref_metadata_all.csv") %>%
   # select(-'replicate')#
-SRR_PFAS <- read.csv("./data/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv") # this is unfiltered duration
+SRR_PFAS <- read.csv("./results_from_analysis/data_input_deseq/metadata_PFAS/PFAS_metadata_all.csv") # this is unfiltered duration
 ```
 
 ```{r}
 # bind the water SRRs into SRR_PFAS
-SRR_water <- read.csv("./data/data_input_deseq/metadata_ref/ref_water_metadata.csv") %>%
+SRR_water <- read.csv("./results_from_analysis/data_input_deseq/metadata_ref/ref_water_metadata.csv") %>%
   select(-'replicate')
 head(SRR_water)
 
@@ -96,7 +96,7 @@ all(metadata_PFAS$Run %in% SRR_filtered$SRR)
 ```{r}
 metadata_PFAS_filtered <- metadata_PFAS %>% 
   filter(Run %in% SRR_filtered$SRR) %>% 
-  rename('SRR'='Run') # need to rename Run to SRR
+  rename('Run'='SRR') # need to rename Run to SRR
 
 # confirm that the SRR sample#s are all the same now contain only duration=1,10
 identical(sort(SRR_filtered$SRR), sort(metadata_PFAS_filtered$SRR))
@@ -149,8 +149,8 @@ unique(metadata_PFAS_filtered_joined$chemical)
 
 ```{r load_data}
 # Lead the reference counts files for PFAS dataset
-markdups_counts_pfas <- read.table("./data/featureCounts/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
-raw_counts_pfas <- read.table("./data/featureCounts/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
+markdups_counts_pfas <- read.table("./data/featureCounts/star_old/pfas/markdups_counts_pfas.txt", header=TRUE, sep = "\t", row.names = 1)
+raw_counts_pfas <- read.table("./data/featureCounts/star_old/pfas/raw_counts_pfas.txt", header=TRUE, sep ="\t", row.names = 1)
 
 # markdups_counts_ref <- read.table("./data/featureCounts/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
 # raw_counts_ref <- read.table("./data/featureCounts/ref/raw_counts_ref.txt", header=TRUE, sep ="\t", row.names = 1)
@@ -184,8 +184,8 @@ head(raw_counts_pfas_cleancols)
 
 Add the water samples into the counts files
 ```{r}
-raw_ref_counts_water <- read.csv("./data/data_input_deseq/water_ref/raw_counts_water.csv",row.names = 1)
-markdups_ref_counts_water <- read.csv("./data/data_input_deseq/water_ref/markdups_counts_water.csv",row.names = 1)
+raw_ref_counts_water <- read.csv("./results_from_analysis/data_input_deseq/water_ref/raw_counts_water.csv",row.names = 1)
+markdups_ref_counts_water <- read.csv("./results_from_analysis/data_input_deseq/water_ref/markdups_counts_water.csv",row.names = 1)
 ```
 ```{r}
 head(raw_ref_counts_water)

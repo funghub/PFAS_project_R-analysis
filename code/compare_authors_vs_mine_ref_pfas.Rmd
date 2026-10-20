@@ -1,0 +1,424 @@
+---
+title: "R Notebook"
+# output: html_notebook
+---
+```{r}
+library(tibble)
+library(dplyr)
+library(pheatmap)
+```
+
+
+Load my RAW featurecounts from MY PIPELINE for probe_names
+/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results/featurecounts
+
+PFAS Compounds
+```{r}
+bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+                      select = -c(Chr,Start,End,Strand,Length)
+                      ) 
+bowtie_pfas <- bowtie_pfas %>% rename_with(~gsub("_.*", "", .x))
+head(bowtie_pfas)
+```
+
+Ref Compounds
+```{r}
+bowtie_ref <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/ref/PROBE_names_results_bowtie/featurecounts/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+                      select = -c(Chr,Start,End,Strand,Length)
+                      ) 
+bowtie_ref <- bowtie_ref %>% rename_with(~gsub("_.*", "", .x))
+head(bowtie_ref)
+```
+
+Load my RAW? featurecounts from authors' pipeline
+PFAS Compounds
+```{r}
+author_pfas_d1 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD1.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d1)
+```
+```{r}
+author_pfas_d4 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD4.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d4)
+```
+```{r}
+author_pfas_d10 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD10.txt", header=TRUE, sep = "\t", row.names = 1)
+head(author_pfas_d10)
+```
+```{r}
+author_pfas_d14 <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/pfas/GSE144775_DataFilteredD14.txt", header=TRUE, sep = "\t", row.names = 1)
+tail(author_pfas_d14)
+```
+Combine all author's author_pfas_d# into one author_pfas
+```{r}
+author_pfas_d1 <- rownames_to_column(author_pfas_d1, var="gene")
+author_pfas_d4 <- rownames_to_column(author_pfas_d4, var="gene")
+author_pfas_d10 <- rownames_to_column(author_pfas_d10, var = "gene")
+author_pfas_d14 <- rownames_to_column(author_pfas_d14, var="gene")
+
+add_dur <- function(df, d) {
+  i <- colnames(df) != "gene"
+  colnames(df)[i] <- paste0(colnames(df)[i], "_d", d)
+  df
+}
+
+author_pfas <- add_dur(author_pfas_d1, 1) %>%
+  full_join(add_dur(author_pfas_d4, 4),   by = "gene") %>%
+  full_join(add_dur(author_pfas_d10, 10), by = "gene") %>%
+  full_join(add_dur(author_pfas_d14, 14), by = "gene") %>%
+  column_to_rownames(var = "gene")
+
+tail(author_pfas)
+colnames(author_pfas)
+# for some reason, the sample titles have duplicates and are not all unique across all durations, so .x was added in full_join
+```
+```{r}
+# check to see if there is NA, like one df had more genes/rows than another
+sum(is.na(author_pfas))
+```
+
+Ref Compounds
+```{r}
+author_ref <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/data/authors/ref/GSE272576_count_table.tsv", header=TRUE, sep = "\t", row.names = 1)
+head(author_ref)
+```
+
+Next Steps:
+- change all sample names to unified naming that has the sample names
+
+Import Unified naming index
+```{r}
+unified_index <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/ultimate_metadata_all.csv", header=TRUE, row.names = 1)
+head(unified_index)
+# unified_index$title
+```
+Add a new column to unified_index to help with the pfas sample names
+```{r}
+is_pfas <- grepl("_R1_001$", unified_index$title)
+
+title_dose <- sub("^[A-Za-z]+([0-9.]+)(?:D[0-9.]+)?_.*$", "\\1", unified_index$title, perl = TRUE)
+
+dose_key <- gsub("-", ".", as.character(unified_index$dose))
+dmso <- is_pfas & unified_index$chemical == "DMSO"
+dose_key[dmso] <- c("0" = "0", "0.17" = "0.00017", "0.3" = "3e.04")[title_dose[dmso]]
+
+unified_index$author_key_pfas <- ifelse(
+  is_pfas,
+  paste0(unified_index$chemical, "_", dose_key, "_",
+         sub("^[^_]+_(\\d+)_.*$", "\\1", unified_index$title),
+         "_d", unified_index$duration),
+  NA
+)
+```
+
+
+Inquiring the sample titles/names of my unified one vs those in the count files
+```{r}
+#test pfas counts dataset
+filter(unified_index, unified_index$title == "DMSO0_465_S81_R1_001") # from the matrix file or from GEOquery
+filter(unified_index, unified_index$title == "DMSO_0.00017_661") # a sample from the count
+filter(unified_index, unified_index$title == "DMSO_0_468") # a sample from the count
+
+#test ref counts dataset
+filter(unified_index, unified_index$tsv_title == "pool1_S1") # a sample from the count
+```
+
+Fix title in unified_index
+
+```{r}
+unified_index
+```
+
+
+
+Unable to use the sample name from the count file for pfas in my unified index file
+- index only able to use on ref dataset
+
+
+
+author_pfas and author_ref
+& 
+bowtie_pfas and bowtie_ref
+- column name samples to unified sample names
+
+Bowtie featurecounts changing the sample names to unified naming
+```{r}
+# import the metadata file from analysis app
+metadata_all <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/data_input_deseq/metadata_all.csv") %>% column_to_rownames(var="X")
+```
+
+```{r}
+# changing sample names for bowtie_pfas
+metadata_all_pfas <- metadata_all[match(colnames(bowtie_pfas), metadata_all$SRR), ]
+stopifnot(identical(colnames(bowtie_pfas), metadata_all_pfas$SRR))
+# metadata_all_pfas <- metadata_all[match(colnames(bowtie_pfas), rownames(metadata_all)), ]
+# stopifnot(identical(colnames(bowtie_pfas), rownames(metadata_all_pfas)))
+
+sample_id <- make.unique(
+  paste(gsub(" ", "_", metadata_all_pfas$chemical), 
+        paste0(metadata_all_pfas$duration, "d"), 
+        paste0(metadata_all_pfas$dose,"uM"), #\u00b5M
+        sep = "-"),
+  sep = "-"
+)
+metadata_all_pfas$sample_id <- sample_id
+rownames(metadata_all_pfas) <- sample_id
+
+colnames(bowtie_pfas) <- sample_id
+
+
+
+# # changing sample names for bowtie_pfas
+# metadata_all_pfas <- metadata_all[match(colnames(bowtie_pfas), metadata_all$SRR), ]
+# stopifnot(identical(colnames(bowtie_pfas), metadata_all_pfas$SRR))
+# 
+# sample_id <- make.unique(
+#   paste(gsub(" ", "_", metadata_all_pfas$chemical), 
+#         paste0(metadata_all_pfas$duration, "d"), 
+#         paste0(metadata_all_pfas$dose,"uM"), #\u00b5M
+#         sep = "-"),
+#   sep = "-"
+# )
+# metadata_all_pfas$sample_id <- sample_id
+# rownames(metadata_all_pfas) <- sample_id
+# colnames(bowtie_pfas) <- sample_id
+```
+
+Author featurecounts changing the sample names to unified naming
+author_pfas (author_pfas not able to use because of sample naming)
+```{r}
+head(colnames(author_pfas))
+cat("TEST\n")
+head(unified_index$author_key_pfas)
+```
+
+
+Inquire Unified Index on what samples to use
+```{r}
+unified_index %>%
+  count(chemical, duration, dose)
+
+# unified_index %>%
+#   distinct(chemical, duration, dose) %>%
+#   arrange(chemical, duration, dose)
+```
+
+
+
+Rename bowtie_pfas with the unified titles
+```{r}
+
+# CAN only confirm with Ref right now with exact match. But can test with PFAS to see if samples correlate
+
+#Choose which samples of specific dose and duration you want to look at
+target_metadata <- unified_index %>%
+  # filter(chemical == "DMSO", duration == 1, dose == 0)
+  filter(chemical == "PFBS", duration == 10, dose == 1e+01)
+
+
+# 2. Find which sample_id from your metadata actually exist in the count matrix columns
+common_srrs <- intersect(target_metadata$X, colnames(bowtie_pfas))
+# YOU SWITCH OUT BOWTIE REF HERE WITH WHAT     DATASET     YOU WANT TO COMPARE
+
+# 3. Subset the count matrix using those valid SRRs
+bowtie_pfas_filtered <- bowtie_pfas[, common_srrs]
+
+# 4. Align the metadata to match the exact column order of the filtered count matrix
+matched_bowtie_meta <- target_metadata[match(colnames(bowtie_pfas_filtered),
+                                                target_metadata$X), ]
+
+# 5. Safely assign the clean sample IDs as column names
+colnames(bowtie_pfas_filtered) <- matched_bowtie_meta$X
+```
+
+Rename author_pfas with the unified titles
+```{r}
+# 1. Filter your unified index metadata for the specific conditions you want (e.g., DMSO, duration 1, dose 0)
+# target_metadata <- unified_index %>%
+#   filter(chemical == "DMSO", duration == 1, dose == 0)
+
+# 2. Find which author columns match the tsv_title in your filtered metadata
+common_author_cols <- intersect(colnames(author_pfas), target_metadata$author_key_pfas)
+author_pfas_filtered <- author_pfas[, common_author_cols]
+
+# 3. Match the metadata rows to the current column order of author_pfas_filtered
+matched_author_meta <- target_metadata[match(colnames(author_pfas_filtered), target_metadata$author_key_pfas), ]
+
+# 4. Construct the new unified sample names incorporating duration, dose, AND keeping "pool" (title/GSM)
+author_sample_id <- make.unique(
+  paste(
+    gsub(" ", "_", matched_author_meta$chemical),
+    paste0(matched_author_meta$duration, "d"),
+    paste0(matched_author_meta$dose, "uM"),
+    # matched_author_meta$title, # Keeps the pool/sample identifier (e.g., pool1_S1)
+    sub("^[^_]+_(\\d+)_.*$", "\\1", matched_author_meta$title),
+    paste0("author"),
+    sep = "-"
+  ),
+  sep = "-"
+)
+
+# 5. Assign the new descriptive sample IDs to the filtered author count matrix
+colnames(author_pfas_filtered) <- author_sample_id
+
+
+
+
+# DO THIS TO GET A PFAS : PFBS dose
+# author_pfas_filtered <- author_pfas %>% select(starts_with("PFBS_10"))
+# colnames(author_pfas_filtered)
+```
+```{r}
+# # 1. Find Author metadata samples that had NO matching column in author_pfas
+# missing_author_samples <- setdiff(na.omit(target_metadata$tsv_title), colnames(author_pfas))
+# cat("Missing author samples:", length(missing_author_samples), "\n")
+# print(missing_author_samples)
+# 
+# # 2. Find Bowtie metadata SRRs that had NO matching column in bowtie_pfas
+# missing_bowtie_srrs <- setdiff(target_metadata$sample_id, colnames(bowtie_pfas))
+# cat("Missing bowtie sample_id:", length(missing_bowtie_srrs), "\n")
+# print(missing_bowtie_srrs)
+```
+
+
+
+
+
+
+# only REF
+Creating the heatmap to compare author_pfas and bowtie_pfas
+```{r}
+
+# 1. Combine your two count matrices (e.g., author_pfas and bowtie_pfas) by gene rows
+# Ensure they share the exact same genes using a full_join or matching row names:
+common_genes <- intersect(rownames(author_pfas_filtered), rownames(bowtie_pfas_filtered))
+
+combined_counts <- cbind(
+  author_pfas_filtered[common_genes, ],
+  bowtie_pfas_filtered[common_genes, ]
+)
+
+# Optional: Log-transform or variance-stabilize counts first for better distance metrics (e.g., log2(counts + 1))
+log_counts <- log2(as.matrix(combined_counts) + 1)
+
+
+
+# # 2. Transpose so samples are rows, then compute Euclidean distance between samples
+# sample_dists <- dist(t(log_counts), method = "euclidean")
+# sample_dist_matrix <- as.matrix(sample_dists)
+
+
+# 2
+# Pearson correlation between samples (columns)
+sample_cor_matrix <- cor(log_counts, method = "pearson")
+# sample_cor_matrix <- cor(log_counts, method = "spearman")
+# Convert to a distance: 1 - r
+sample_dists <- as.dist(1 - sample_cor_matrix)
+
+
+
+
+# 1. Create an annotation data frame matching the columns of your combined matrix
+# Ensure the row names of this annotation data frame match the column names of your sample_dist_matrix
+annotation_df = data.frame(
+  Pipeline = ifelse(grepl("author", colnames(sample_cor_matrix), ignore.case = TRUE), "Author", "Bowtie"), # if has pool=author
+  row.names = colnames(sample_cor_matrix)
+)
+
+# 3. Plot the sample-to-sample distance heatmap
+pheatmap(
+  # sample_dist_matrix,
+  sample_cor_matrix,
+  clustering_distance_rows = sample_dists,
+  clustering_distance_cols = sample_dists,
+  annotation_row = annotation_df,
+  annotation_col = annotation_df,
+  fontsize_row = 5,        # Adjust row font size (try 5 or 6)
+  fontsize_col = 6,        # Adjust column font size (try 5 or 6)
+  angle_col = "45",        # Tilts the bottom column labels so they don't crash into each other
+  # main = "Sample Distance Heatmap (Euclidean)"
+  main = "Sample Distance Heatmap (Pearson)"
+)
+```
+
+See what probe_names dropped --> 0
+```{r}
+# 1. Inspect the first few row names of each table to verify format compatibility
+print("Author row name examples:")
+print(head(rownames(author_pfas)))
+
+print("Bowtie row name examples:")
+print(head(rownames(bowtie_pfas)))
+
+# 2. Check which genes are unique to each table
+only_in_author <- setdiff(rownames(author_pfas), rownames(bowtie_pfas))
+only_in_bowtie <- setdiff(rownames(bowtie_pfas), rownames(author_pfas))
+
+# 3. Print the counts of dropped genes
+cat("Number of genes only in author_pfas:", length(only_in_author), "\n")
+cat("Number of genes only in bowtie_pfas:", length(only_in_bowtie), "\n")
+
+# 4. Peek at the first few discrepancies
+if(length(only_in_author) > 0) {
+  cat("First few unique to author_pfas:\n")
+  print(head(only_in_author))
+}
+
+if(length(only_in_bowtie) > 0) {
+  cat("First few unique to bowtie_pfas:\n")
+  print(head(only_in_bowtie))
+}
+```
+
+View the Samples in the Exact Clustered Order (Dendrogram Order)
+```{r}
+hc <- hclust(sample_dists)
+
+# Get the sample names sorted by their final tree position
+clustered_sample_order <- colnames(sample_cor_matrix)[hc$order]
+print(clustered_sample_order)
+```
+
+```{r}
+dim(sample_cor_matrix)
+```
+
+
+Only use this below if you want to see a portion of the heatmap, like for DMSO (too many samples)
+```{r}
+# Full-data clustering order (silent = no plot)
+p_full <- pheatmap(sample_cor_matrix,
+                   clustering_distance_rows = sample_dists,
+                   clustering_distance_cols = sample_dists,
+                   silent = TRUE)
+full_order <- rownames(sample_cor_matrix)[p_full$tree_row$order]
+
+# Pick a portion of the clustered order, e.g. samples 1 to 30
+portion <- full_order[1:30]
+# portion <- full_order[50:80]
+
+
+pheatmap(
+  sample_cor_matrix[portion, portion],
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  annotation_row = annotation_df[portion, , drop = FALSE],
+  annotation_col = annotation_df[portion, , drop = FALSE],
+  fontsize_row = 7,
+  fontsize_col = 7,
+  angle_col = "45",
+  main = "Portion of full clustered heatmap (Pearson)"
+)
+```
+
+
+```{r}
+unified_index %>%
+  filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
+  group_by(duration) %>%
+  summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
+```
+
+```{r}
+# grep("3e.04", colnames(author_pfas), value = TRUE)
+```
+
