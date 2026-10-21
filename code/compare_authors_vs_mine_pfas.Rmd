@@ -8,6 +8,23 @@ library(dplyr)
 library(pheatmap)
 ```
 
+These are the sample we want to filter for the heatmap
+```{r}
+  # filter(chemical == "PFBS", duration == 10, dose == 1e+01)
+filter_chemical <- "PFBS"
+filter_duration <- 10
+filter_dose <- 1e+01
+```
+
+Run it once and then see the unique combinations you can do for the chemicals:
+Just seeing the unique combinations for PFAS
+```{r}
+unique(unified_index$chemical)
+unified_index %>%
+  filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
+  group_by(duration) %>%
+  summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
+```
 
 Load my RAW featurecounts from MY PIPELINE for probe_names
 /home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/pfas/PROBE_names_results/featurecounts
@@ -111,15 +128,24 @@ unified_index <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R
 head(unified_index)
 # unified_index$title
 ```
-Add a new column to unified_index to help with the pfas sample names
+Add a new column to unified_index to match pfas sample names of authors with the unified naming index
 ```{r}
 is_pfas <- grepl("_R1_001$", unified_index$title)
 
 title_dose <- sub("^[A-Za-z]+([0-9.]+)(?:D[0-9.]+)?_.*$", "\\1", unified_index$title, perl = TRUE)
 
 dose_key <- gsub("-", ".", as.character(unified_index$dose))
+
+# check what the dose things look like from author sample names vs my pipeline index
+unique(dose_key)
+unique(unified_index$dose)
+
 dmso <- is_pfas & unified_index$chemical == "DMSO"
-dose_key[dmso] <- c("0" = "0", "0.17" = "0.00017", "0.3" = "3e.04")[title_dose[dmso]]
+
+# authors’ names the DMSO dose is not always 0, as seen in unified_index$title vs $dose
+# therefore, we use the title to get the dose to make the author's style of sample naming
+dose_key[dmso] <- gsub("-", ".",
+  as.character(round(as.numeric(title_dose[dmso]) / 1000, 10)))
 
 unified_index$author_key_pfas <- ifelse(
   is_pfas,
@@ -232,7 +258,7 @@ Rename bowtie_pfas with the unified titles
 #Choose which samples of specific dose and duration you want to look at
 target_metadata <- unified_index %>%
   # filter(chemical == "DMSO", duration == 1, dose == 0)
-  filter(chemical == "PFBS", duration == 10, dose == 1e+01)
+  filter(chemical == filter_chemical, duration == filter_duration, dose == filter_dose)
 
 
 # 2. Find which sample_id from your metadata actually exist in the count matrix columns
@@ -304,7 +330,7 @@ colnames(author_pfas_filtered) <- author_sample_id
 
 
 
-# only REF
+# only PFAS
 Creating the heatmap to compare author_pfas and bowtie_pfas
 ```{r}
 
@@ -416,29 +442,78 @@ full_order <- rownames(sample_cor_matrix)[p_full$tree_row$order]
 portion <- full_order[1:30]
 # portion <- full_order[50:80]
 
-
-pheatmap(
-  sample_cor_matrix[portion, portion],
-  cluster_rows = FALSE,
-  cluster_cols = FALSE,
-  annotation_row = annotation_df[portion, , drop = FALSE],
-  annotation_col = annotation_df[portion, , drop = FALSE],
-  fontsize_row = 7,
-  fontsize_col = 7,
-  angle_col = "45",
-  main = "Portion of full clustered heatmap (Pearson)"
-)
+#UNCOMMENT THIS IF USING
+# pheatmap(
+#   sample_cor_matrix[portion, portion],
+#   cluster_rows = FALSE,
+#   cluster_cols = FALSE,
+#   annotation_row = annotation_df[portion, , drop = FALSE],
+#   annotation_col = annotation_df[portion, , drop = FALSE],
+#   fontsize_row = 7,
+#   fontsize_col = 7,
+#   angle_col = "45",
+#   main = "Portion of full clustered heatmap (Pearson)"
+# )
 ```
 
 
-```{r}
-unified_index %>%
-  filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
-  group_by(duration) %>%
-  summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
-```
 
 ```{r}
 # grep("3e.04", colnames(author_pfas), value = TRUE)
 ```
 
+Spearman correlation heatmap, instead of pearson (ranking based, look at ranking of genes per sample, instead of measuring covariance between samples)
+Creating the heatmap to compare author_pfas and bowtie_pfas
+```{r}
+
+# 1. Combine your two count matrices (e.g., author_pfas and bowtie_pfas) by gene rows
+# Ensure they share the exact same genes using a full_join or matching row names:
+common_genes <- intersect(rownames(author_pfas_filtered), rownames(bowtie_pfas_filtered))
+
+combined_counts <- cbind(
+  author_pfas_filtered[common_genes, ],
+  bowtie_pfas_filtered[common_genes, ]
+)
+
+# Optional: Log-transform or variance-stabilize counts first for better distance metrics (e.g., log2(counts + 1))
+log_counts <- log2(as.matrix(combined_counts) + 1)
+
+
+
+# # 2. Transpose so samples are rows, then compute Euclidean distance between samples
+# sample_dists <- dist(t(log_counts), method = "euclidean")
+# sample_dist_matrix <- as.matrix(sample_dists)
+
+
+# 2
+# Pearson correlation between samples (columns)
+# sample_cor_matrix <- cor(log_counts, method = "pearson")
+sample_cor_matrix <- cor(log_counts, method = "spearman")
+# Convert to a distance: 1 - r
+sample_dists <- as.dist(1 - sample_cor_matrix)
+
+
+
+
+# 1. Create an annotation data frame matching the columns of your combined matrix
+# Ensure the row names of this annotation data frame match the column names of your sample_dist_matrix
+annotation_df = data.frame(
+  Pipeline = ifelse(grepl("author", colnames(sample_cor_matrix), ignore.case = TRUE), "Author", "Bowtie"), # if has pool=author
+  row.names = colnames(sample_cor_matrix)
+)
+
+# 3. Plot the sample-to-sample distance heatmap
+pheatmap(
+  # sample_dist_matrix,
+  sample_cor_matrix,
+  clustering_distance_rows = sample_dists,
+  clustering_distance_cols = sample_dists,
+  annotation_row = annotation_df,
+  annotation_col = annotation_df,
+  fontsize_row = 5,        # Adjust row font size (try 5 or 6)
+  fontsize_col = 6,        # Adjust column font size (try 5 or 6)
+  angle_col = "45",        # Tilts the bottom column labels so they don't crash into each other
+  # main = "Sample Distance Heatmap (Euclidean)"
+  main = "Sample Distance Heatmap (Spearman)"
+)
+```
