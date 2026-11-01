@@ -19,12 +19,12 @@ filter_dose <- 5e+01
 Run it once and then see the unique combinations you can do for the chemicals:
 Just seeing the unique combinations for PFAS
 ```{r}
-unique(unified_index$chemical)
-unified_index %>%
-  # filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
-  filter(chemical == "acetaminophen") %>%
-  group_by(duration) %>%
-  summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
+# unique(unified_index$chemical)
+# unified_index %>%
+#   # filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
+#   filter(chemical == "acetaminophen") %>%
+#   group_by(duration) %>%
+#   summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
 ```
 
 
@@ -48,7 +48,7 @@ Ref Compounds
 #                       select = -c(Chr,Start,End,Strand,Length)
 #                       ) 
 #END2END
-bowtie_ref <- subset(read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/end2end/featurecounts_probenames/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+bowtie_ref <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/end2end/featurecounts_probenames/featurecounts_new/raw_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
                       select = -c(Chr,Start,End,Strand,Length)
                       )
 

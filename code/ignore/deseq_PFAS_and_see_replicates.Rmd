@@ -5,6 +5,9 @@ date: "2026-06-22"
 ---
 Goal: run DESeq on all PFAS data
 
+Scroll for : CHECK what are the combinations in this: for PFAS dataset , check replicate number
+
+
 ```{r setup, include=FALSE}
 knitr::opts_knit$set(root.dir = here::here())
 knitr::opts_chunk$set(echo = TRUE)
@@ -108,6 +111,7 @@ setdiff(SRR_filtered$SRR,metadata_PFAS_filtered$SRR) # should have no diff
 # right merge duration and dose of SRR_all (based on SRR_all$SRR with metadata_PFAS_filtered$Run)
 head(metadata_PFAS_filtered) 
 head(SRR_filtered)
+filter(SRR_filtered,SRR_filtered$chemical.y == "DMSO")
 ```
 Check if there are any different SRR numbers
 ```{r}
@@ -247,7 +251,7 @@ Select 1 day = duration for metadata file
 metadata_PFAS_filtered_joined_test <- metadata_PFAS_filtered_joined %>%
   filter(duration == 1)
 head(metadata_PFAS_filtered_joined_test)
-unique(metadata_PFAS_filtered_joined_test$duration)
+# unique(metadata_PFAS_filtered_joined_test$duration)
 ```
 
 ```{r}
@@ -273,6 +277,30 @@ ncol(markdups_counts_pfas_cleancols_filtered) == nrow(metadata_PFAS_filtered_joi
 ```
 
 This confirms that my counts PFAS file filtered now contain the same samples as the metadata filtered for 1 or 10 duration.
+
+
+CHECK what are the combinations in this:
+```{r}
+combo_counts <- metadata_PFAS_filtered_joined_test %>%
+  count(chemical, duration, dose, name = "n_samples")
+
+combo_counts
+```
+```{r}
+sum(combo_counts$n_samples != 4)
+
+# which ones
+combo_counts %>% filter(n_samples != 4)
+
+# how many combinations have each count
+table(combo_counts$n_samples)
+```
+
+
+
+
+
+
 
 Now, we need to reorder the columns of featurecounts to be the same as rows in metadata
 "It is absolutely critical that the columns of the count matrix and the rows of the column data (information about samples) are in the same order. DESeq2 will not make guesses as to which column of the count matrix belongs to which row of the column data, these must be provided to DESeq2 already in consistent order."

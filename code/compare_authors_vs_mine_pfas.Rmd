@@ -19,11 +19,11 @@ filter_dose <- 1e+01
 Run it once and then see the unique combinations you can do for the chemicals:
 Just seeing the unique combinations for PFAS
 ```{r}
-unique(unified_index$chemical)
-unified_index %>%
-  filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
-  group_by(duration) %>%
-  summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
+# unique(unified_index$chemical)
+# unified_index %>%
+#   filter(chemical == "PFOA", grepl("_R1_001$", title)) %>%
+#   group_by(duration) %>%
+#   summarise(min_dose = min(dose), max_dose = max(dose), doses = paste(sort(unique(dose)), collapse = ", "))
 ```
 
 Load my RAW featurecounts from MY PIPELINE for probe_names
@@ -32,19 +32,19 @@ Load my RAW featurecounts from MY PIPELINE for probe_names
 PFAS Compounds
 ```{r}
 # LOCAL version manifest v1.2
-bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas_manifest_v1.2/local/featurecounts_probenames/raw_local_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
+# bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas_manifest_v1.2/local/featurecounts_probenames/raw_local_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
+#                       select = -c(Chr,Start,End,Strand,Length)
+#                       )
+
+#END2END with manifest v2 (wrong?)
+bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas/end2end/featurecounts_probenames/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
                       select = -c(Chr,Start,End,Strand,Length)
                       )
 
-#END2END with manifest v2 (wrong?)
-# bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas/end2end/featurecounts_probenames/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
-#                       select = -c(Chr,Start,End,Strand,Length)
-#                       ) 
-
 #END2END with manifest v1.2
-# bowtie_pfas <- subset(read.table("?????", header=TRUE, sep = "\t", row.names = 1),
+# bowtie_pfas <- subset(read.table("/home/lawrence/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas_manifest_v1.2/end2end/featurecounts_probenames/raw_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
 #                       select = -c(Chr,Start,End,Strand,Length)
-#                       ) 
+#                       )
 
 
 bowtie_pfas <- bowtie_pfas %>% rename_with(~gsub("_.*", "", .x))

@@ -1,0 +1,175 @@
+---
+title: "Sequence Read Distribution PFAS per Sample"
+output: html_notebook
+---
+```{r}
+library(dplyr)
+library(tibble)
+library(ggplot2)
+```
+```{r}
+library(scales)
+
+# scale_y_continuous(labels = label_comma())      # 1,500,000
+# or
+# scale_y_continuous(labels = label_number(scale = 1e-6, suffix = "M"))  # 1.5M
+```
+
+
+The goal of this notebook:
+- see if there are some groups of samples with less reads
+- and see if PFBS has less reads than others leading to unclear results in DESeq2
+
+"Bowtie 2 / HiSAT2
+Results from both Bowtie 2 and HISAT2, tools for aligning reads against a reference genome.http://bowtie-bio.sourceforge.net/bowtie2; https://ccb.jhu.edu/software/hisat2DOI: 10.1038/nmeth.1923; 10.1038/nmeth.3317; 10.1038/s41587-019-0201-4
+Single-end alignments
+This plot shows the number of reads aligning to the reference in different ways."
+
+
+import sequence mapped from multiqc (pfas manifest v1.2 - end2end)
+```{r}
+reads_distr <- read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas_manifest_v1.2/end2end/pfas_v1.2_bowtie2_se_plot.tsv", header=TRUE, sep = "\t")
+```
+
+```{r}
+reads_distr
+```
+Remove _bowtie from the column sample
+```{r}
+reads_distr$Sample <- gsub("_bowtie","",reads_distr$Sample)
+```
+
+import the metadata_all
+```{r}
+# import the metadata file from analysis app
+metadata_pfas <- read.csv("/home/lawrence/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/data_input_deseq/metadata_all.csv")  %>% select(X,SRR,chemical,duration,dose) %>% filter(chemical %in% c("DMSO_pfas","PFBS","PFOS","PFDS","PFOA")) %>% rename("Sample" = "SRR")
+metadata_pfas
+unique(metadata_pfas$chemical)
+```
+Merge the reads_distr with the metadata_pfas
+```{r}
+merged_df <- full_join(metadata_pfas, reads_distr, by = "Sample")
+merged_df
+```
+Now group by chemical, duration, and dose
+```{r}
+merged_df_arranged <- merged_df %>% arrange(chemical,duration,dose)
+merged_df_arranged
+```
+Take the mean of mapped.uniquely of the replicates for each sample group (duration and dose)
+```{r}
+chemical_summary <- merged_df %>% group_by(chemical,duration,dose) %>%
+  summarise(
+    mean_unique_mapped = mean(SE.mapped.uniquely, na.rm = TRUE),
+    total_samples = n()
+  ) %>%
+  arrange(chemical,duration,dose,mean_unique_mapped)
+
+chemical_summary
+```
+How about grouping just by chemical and duration, including dose would be too much
+```{r}
+chemical_summary <- merged_df %>% group_by(chemical,duration) %>%
+  summarise(
+    mean_unique_mapped = mean(SE.mapped.uniquely, na.rm = TRUE),
+    total_samples = n()
+  ) %>%
+  arrange(chemical,duration,mean_unique_mapped)
+
+chemical_summary
+```
+
+
+
+Create a bar graph comparing them all
+```{r}
+ggplot(chemical_summary, aes(x = chemical, y = mean_unique_mapped, fill = chemical)) +
+  geom_col(position = "dodge") + #stack is the other option
+  facet_wrap(~ duration, scales = "free_y",
+             labeller = labeller(duration = function(x) paste("Day", x))) + 
+              # apply function to facet variable to add "day"
+  labs(
+    title = "Mean of Uniquely Mapped Reads by Chemical Treatment",
+    subtitle = "Comparing read depths across different durations (days)",
+    x = "Chemical",
+    y = "Mean of Uniquely Mapped Reads",
+    fill = "Chemical"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1") +
+  scale_y_continuous(labels = label_comma()) +     # 1,500,000
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), # Rotates chemical names so they don't overlap
+    legend.position = "none" # Hide legend since X-axis labels already show the chemicals
+  )
+```
+
+```{r}
+chemical_summary_simple <- merged_df %>% group_by(chemical) %>%
+  summarise(
+    mean_unique_mapped = mean(SE.mapped.uniquely, na.rm = TRUE),
+    total_samples = n()
+  )
+
+chemical_summary_simple
+
+ggplot(chemical_summary_simple, aes(x = reorder(chemical, mean_unique_mapped), y = mean_unique_mapped, fill = chemical)) +
+  geom_col() +
+  coord_flip() + # Horizontal bars are easier to read
+  labs(
+    title = "Overall Mean Uniquely Mapped Reads per Chemical",
+    x = "Chemical",
+    y = "Mean Uniquely Mapped Reads"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1") +
+  scale_y_continuous(labels = label_comma()) +     # 1,500,000
+  theme(legend.position = "none")
+```
+```{r}
+ggplot(merged_df, aes(x = chemical, y = SE.mapped.uniquely, fill = chemical)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.9) + # Shows individual samples as dots
+  labs(
+    title = "Read Count Distribution Across PFAS Chemicals",
+    x = "Chemical",
+    y = "Uniquely Mapped Reads"
+  ) +
+  theme_minimal() +
+  scale_y_continuous(labels = label_comma()) +     # 1,500,000
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(merged_df, aes(x = chemical, y = SE.not.aligned, fill = chemical)) +
+# ggplot(merged_df, aes(x = chemical, y = SE.mapped.uniquely, fill = chemical)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.9) + # Shows individual samples as dots
+  labs(
+    title = "Reads Not Aligned Distribution Across PFAS Chemicals",
+    x = "Chemical",
+    y = "Reads Not Aligned"
+  ) +
+  theme_minimal() +
+  scale_y_continuous(labels = label_comma()) +     # 1,500,000
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none")
+```
+```{r}
+ggplot(merged_df, aes(x = chemical, y = SE.multimapped, fill = chemical)) +
+# ggplot(merged_df, aes(x = chemical, y = SE.mapped.uniquely, fill = chemical)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.9) + # Shows individual samples as dots
+  labs(
+    title = "Read Multi Mapped Distribution Across PFAS Chemicals",
+    x = "Chemical",
+    y = "Multi Mapped Reads"
+  ) +
+  theme_minimal() +
+  scale_y_continuous(labels = label_comma()) +     # 1,500,000
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none")
+
+```
+

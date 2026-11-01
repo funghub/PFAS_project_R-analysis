@@ -25,23 +25,23 @@ getwd()
 
 ```{r load_data}
 # Lead the reference counts files for PFAS dataset
-markdups_counts_ref <- read.table("./data/featureCounts/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
-raw_counts_ref <- read.table("./data/featureCounts/ref/raw_counts_ref.txt", header=TRUE, sep ="\t", row.names = 1)
+# markdups_counts_ref <- read.table("./data/featureCounts/ref/markdups_counts_ref.txt", header=TRUE, sep = "\t", row.names = 1)
+raw_counts_ref <- read.table("~/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/ref/raw_local_counts.txt", header=TRUE, sep ="\t", row.names = 1)
 
 # raw_counts_ncbi_pfas <- read.table("featureCounts/ncbi_pipeline_counts/pfas/GSE144775_raw_counts_GRCh38.p13_NCBI.tsv", header=TRUE, sep = "\t")
 ```
 
 ```{r}
 # Replace everything after _ and the _ with nothing in all column names
-markdups_counts_ref_cleancols <- markdups_counts_ref %>%
-  rename_with(~gsub("_.*", "", .x)) %>% 
-  select(-c("Chr", "Start", "End", "Strand", "Length"))
+# markdups_counts_ref_cleancols <- markdups_counts_ref %>%
+#   rename_with(~gsub("_.*", "", .x)) %>% 
+#   select(-c("Chr", "Start", "End", "Strand", "Length"))
 
 raw_counts_ref_cleancols <- raw_counts_ref %>% 
   rename_with(~gsub("_.*", "", .x)) %>% 
   select(-c("Chr", "Start", "End", "Strand", "Length"))
 
-head(markdups_counts_ref_cleancols)
+# head(markdups_counts_ref_cleancols)
 head(raw_counts_ref_cleancols)
 
 ```
@@ -69,6 +69,33 @@ GEO #GSE144775
 head(ref_metadata)
 # head(PFAS_series_matrix)
 ```
+```{r}
+filter(ref_metadata, ref_metadata$chemical == "DMSO")
+```
+
+See what combinations of samples:
+```{r}
+ref_metadata_reps <- ref_metadata
+
+ref_metadata_reps$timepoint <- as.numeric(sub("d", "", sub("24h", "1", ref_metadata$timepoint)))
+
+
+combo_counts <- ref_metadata_reps %>%
+  count(chemical, timepoint, dose, name = "n_samples")
+
+combo_counts
+```
+```{r}
+sum(combo_counts$n_samples != 4)
+
+# which ones
+combo_counts %>% filter(n_samples != 4)
+
+# how many combinations have each count
+table(combo_counts$n_samples)
+```
+
+
 
 SRR → GSM → title to recover concentration and timepoint
 Documentation of GEOquery: https://bioconductor.org/packages/release/bioc/vignettes/GEOquery/inst/doc/GEOquery.html

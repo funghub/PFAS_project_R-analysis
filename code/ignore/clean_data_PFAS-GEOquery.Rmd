@@ -117,7 +117,7 @@ gsm_titles <- data.frame(
 Meta(gsm_list[[5]])$characteristics_ch1
 # Meta(gsm_list[[5]])$characteristics_ch1[1]
 # sub("^chemical: ","",Meta(gsm_list[[5]])$characteristics_ch1[1])
-# Meta(gsm_list[[5]])
+# Meta(gsm_list[[20]])
 
 # if this not work wget, get parse!!
 
