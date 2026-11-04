@@ -148,6 +148,9 @@ build_masters <- function() {
     select(!chemical.y) %>%
     mutate(chemical = ifelse(chemical == "DMSO", "DMSO_pfas", chemical))
   
+  metadata_ref_final$dataset <- "ref"
+  metadata_PFAS_final_merged$dataset <- "pfas"
+  
   # make the master metadata dataframe combine metadata_PFAS_final with metadata_ref_final
   metadata_all <- rbind(metadata_ref_final, metadata_PFAS_final_merged)
   
@@ -181,7 +184,7 @@ build_masters <- function() {
   
   # CREATE the Master Counts File (PFAS dataset + Ref Dataset)
   
-  ## Ref dataset counts (featureCounts raw, not markdups)
+  ## Ref dataset counts (featureCounts raw end2end, not markdups)
   raw_counts_ref <- read.table("./data/featureCounts/bowtie/ref/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
   
   ## Replace everything after _ and the _ with nothing in all column names
@@ -189,7 +192,7 @@ build_masters <- function() {
     rename_with(~gsub("_.*", "", .x)) %>%
     select(-c("Chr", "Start", "End", "Strand", "Length"))
   
-  ## PFAS dataset counts (featureCounts raw, not markdups)
+  ## PFAS dataset counts (featureCounts raw end2end, not markdups)
   raw_counts_pfas <- read.table("./data/featureCounts/bowtie/pfas/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
   
   # Replace everything after _ and the _ with nothing in all column names
@@ -199,11 +202,19 @@ build_masters <- function() {
   
   # check that the row names are the same so that means genes are the same
   # then combine the columns if true
-  if (identical(rownames(raw_counts_pfas_cleancols), rownames(raw_counts_ref_cleancols))) {
-    raw_counts_all <- cbind(raw_counts_pfas_cleancols, raw_counts_ref_cleancols)
-  } else {
-    stop("Row names do NOT match between raw_counts_pfas_cleancols and raw_counts_ref_cleancols — check gene order/IDs before combining.")
-  }
+  # if (identical(rownames(raw_counts_pfas_cleancols), rownames(raw_counts_ref_cleancols))) {
+  #   raw_counts_all <- cbind(raw_counts_pfas_cleancols, raw_counts_ref_cleancols)
+  # } else {
+  #   stop("Row names do NOT match between raw_counts_pfas_cleancols and raw_counts_ref_cleancols — check gene order/IDs before combining.")
+  # }
+  #NEW replace above
+  # Because the filter runs on only the selected samples, a PFAS-only comparison keeps every gene present in the PFAS manifest, including those missing from ref
+  raw_counts_all <- merge(raw_counts_pfas_cleancols,
+                          raw_counts_ref_cleancols,
+                          by = "row.names", all = TRUE) %>%
+    column_to_rownames("Row.names")
+  
+  stopifnot(!anyDuplicated(colnames(raw_counts_all)))
   
   # align metadata rows to counts columns, then rename SRR to chemical_duration_dose
   # (replicates share a combo, so make.unique appends _1, _2, ...)
@@ -297,6 +308,11 @@ run_deseq_analysis <- function(chemicals_chosen,controls_chosen,duration_chosen,
   # counts col samples == metadata rownames
   raw_counts_all_filtered <- raw_counts_all[, rownames(metadata_all_filtered)]
   
+  # drop genes not quantified in the selected samples' dataset
+  raw_counts_all_filtered <- raw_counts_all_filtered[complete.cases(raw_counts_all_filtered), ]
+  # Because the filter runs on only the selected samples, a PFAS-only comparison keeps every gene present in the PFAS manifest, including those missing from ref
+  # doesn't work for cross-datasets selctions (compare pfas chemical with that of ref)
+  
   # create dds
   dds <- DESeqDataSetFromMatrix(
     countData = raw_counts_all_filtered, # sample gene counts unnormalized
@@ -363,7 +379,7 @@ run_deseq_analysis <- function(chemicals_chosen,controls_chosen,duration_chosen,
   }
   gene_list <- res[[metric]] # Pulls out the column corresponding to metric
   names(gene_list) <- rownames(res) # add row names into this df gene_list
-  gene_list <- gene_list[!is.na(gene_list)] # remove na stat rows
+  gene_list <- gene_list[!is.na(gene_list)] # remove NA stat rows
   rnk_df <- data.frame("SYMBOL" = names(gene_list), "METRIC" = gene_list) %>%
     arrange(desc(METRIC))
   
@@ -403,6 +419,14 @@ metadata_all <- masters$metadata_all
 raw_counts_all <- masters$raw_counts_all
 # raw_counts_all is a dataframe containing the counts for all samples
 
+# which dataset(s) each chemical/control appears in
+chem_datasets <- distinct(metadata_all, chemical, dataset)
+
+same_dataset <- function(chems) {
+  sets <- split(chem_datasets$dataset, chem_datasets$chemical)[chems]
+  length(Reduce(intersect, sets)) > 0
+}
+
 # print(head(rownames(raw_counts_all))) #test
 
 # -------------------------------------------------------------
@@ -423,6 +447,7 @@ ui <- fluidPage(
                   multiple = TRUE, selected = "PFBS"),
       selectInput("controls", "Control:",
                   choices = CONTROLS, selected = "DMSO_pfas"),
+      uiOutput("dataset_warning"),
       checkboxGroupInput("durations", "Duration(s):",
                          choices = DURATION_CHOICES, selected = c(1, 10)),
       p("If you choose one duration, you must unselect duration\" from DESeq 
@@ -518,6 +543,10 @@ ui <- fluidPage(
           plotOutput("heatmap", height = "700px"),
           hr(),
           
+          h3("Interested Genes"),
+          tableOutput("interested_genes"),
+          hr(),
+          
           h3("Gene Expression Heatmap: Significant Genes Only (genes vs samples)"),          textOutput("heatmap_significant_text"),
           plotOutput("heatmap_significant",height = "700px"),
           hr(),
@@ -603,6 +632,13 @@ server <- function(input, output, session) {
         input$padj_val, input$log2fold_abs, input$sort_res, input$sort_dir,
         !any(input$chemicals %in% input$controls) # Ensures no overlap between chemical and control selections
     )
+    
+    if (!same_dataset(c(input$chemicals, input$controls))) {
+      showNotification(
+        "Warning: selection spans PFAS and ref datasets. Results are confounded with batch, and only genes shared by both manifests (v1.2 and 2) are used.",
+        type = "warning", duration = 10)
+    }
+    
     terms <- input$design_terms
     terms <- c(setdiff(terms, "chemical"), "chemical") # must put chemical last so results() is the chemical contrast
     # Note: In order to benefit from the default settings of the package, you should put the variable of interest at the end of the formula and make sure the control level is the first level
@@ -621,6 +657,12 @@ server <- function(input, output, session) {
       raw_counts_all = raw_counts_all,
       design_txt = paste("~", paste(terms, collapse = " + "))
     )
+  })
+  
+  output$dataset_warning <- renderUI({
+    req(input$chemicals, input$controls)
+    if (!same_dataset(c(input$chemicals, input$controls)))
+      div(style = "color:red;", "Warning: selection spans PFAS and ref datasets. Only genes shared by manifest v1.2 and 2 will be used. Beware of batch effect since datasets experimented separately.")
   })
   
   # 3. PCA Plot
@@ -692,7 +734,37 @@ server <- function(input, output, session) {
     as.data.frame(head(res_table, 20))
   }, rownames = TRUE)
   
+  # NEW: just the intereseted genes
+  output$interested_genes <- renderTable({
+    req(input$genes_interested, analysis()$vsd) # make sure analysis() is not NULL and has run
+    res_table <- analysis()$results
+    
+    # parse the genes out from the text (account whitespaces, and comma as sep)
+    genes_no_white_spaces <-gsub(" ","",input$genes_interested)
+    if (genes_no_white_spaces != "ALL") {
+      # convert genes to vector
+      genes_vector <- strsplit(genes_no_white_spaces, ",")[[1]]
+      # filtering the genes I want
+      res_table <- res_table[rownames(res_table) %in% genes_vector, , drop = FALSE]
+      validate(need(nrow(res_table) > 0, "None of the entered genes were found."))
+    }
+    
+    
+    # second sort (live, no need to re-run DESeq2)
+    if (input$sort_res2 != "none") {
+      # first sort was adjusted p-value: keep only padj below the slider, then sort
+      if (input$sort_res == "padj") {
+        res_table <- res_table[!is.na(res_table$padj) & res_table$padj < input$padj_val, ,drop = FALSE]
+      }
+      res_table <- res_table[
+        order(res_table[[input$sort_res2]],
+              decreasing = input$sort_dir2 == "decreasing"), ,drop = FALSE]
+    }
+    # as.data.frame(head(res_table, 60))
+    as.data.frame(res_table)
+  }, rownames = TRUE)
   
+
   # 1.1. Full DESeq2 Results -> 2. Top 20 Genes - lfcShrink
   output$top_genes_lfcShrink <- renderTable({
     req(analysis()$resultsLFC) # make sure analysis() is not NULL and has run

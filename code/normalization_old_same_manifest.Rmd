@@ -11,6 +11,7 @@ Library for CPM?
 library(edgeR)
 library(dplyr)
 library(scales)
+library(tibble)
 ```
 
 ```{r setup, include=FALSE}
@@ -24,7 +25,7 @@ knitr::opts_knit$set(root.dir = here::here()) # left from Rmd # Changes the work
   # CREATE the Master Counts File (PFAS dataset + Ref Dataset)
   
   ## Ref dataset counts (featureCounts raw, not markdups)
-  raw_counts_ref <- read.table("./data/featureCounts/bowtie/ref/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+  raw_counts_ref <- read.table("~/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/ref/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
   
   ## Replace everything after _ and the _ with nothing in all column names
   raw_counts_ref_cleancols <- raw_counts_ref %>%
@@ -32,7 +33,7 @@ knitr::opts_knit$set(root.dir = here::here()) # left from Rmd # Changes the work
     select(-c("Chr", "Start", "End", "Strand", "Length"))
   
   ## PFAS dataset counts (featureCounts raw, not markdups)
-  raw_counts_pfas <- read.table("./data/featureCounts/bowtie/pfas/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
+  raw_counts_pfas <- read.table("~/Documents/School/thesis/PFAS_project_R-analysis/data/featureCounts/bowtie/pfas/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1)
   
   # Replace everything after _ and the _ with nothing in all column names
   raw_counts_pfas_cleancols <- raw_counts_pfas %>%
@@ -53,11 +54,17 @@ if (identical(rownames(raw_counts_pfas_cleancols), rownames(raw_counts_ref_clean
 } else {
   stop("Row names do NOT match between raw_counts_pfas_cleancols and raw_counts_ref_cleancols — check gene order/IDs before combining.")
 }
+#NEW replace above
+# Because the filter runs on only the selected samples, a PFAS-only comparison keeps every gene present in the PFAS manifest, including those missing from ref
+# raw_counts_all <- merge(raw_counts_pfas_cleancols,
+#                         raw_counts_ref_cleancols,
+#                         by = "row.names", all = TRUE) %>%
+#   column_to_rownames("Row.names")
 ```
 
 Import the metadata all file
 ```{r}
-metadata_all <- read.csv("./results_from_analysis/data_input_deseq/metadata_all.csv")
+metadata_all <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/results_from_analysis/data_input_deseq/metadata_all.csv")
 ```
 
 ```{r}

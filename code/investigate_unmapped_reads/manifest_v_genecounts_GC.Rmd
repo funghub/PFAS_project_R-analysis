@@ -1,0 +1,140 @@
+---
+title: "manifest vs genecounts for GC% comparison"
+output: html_notebook
+---
+```{r}
+library(dplyr)
+library(tibble)
+library(stringr) 
+library(ggplot2)
+```
+
+
+In Gene count file (end2end)
+- See if GC content of gene probes is negatively correlated with gene count file?
+--Sum up all the counts for the gene in all samples, then compare?
+--Plot it to compare? To see if they are correlated
+--Higher GC, higher binding of primer dimer? ->lower gene count?
+--Explain: those probes with higher GC will make more unmappable reads because of primer dimer, possibly
+
+Import the count files end2end
+```{r}
+# import pfas featurecounts v1.2 end2end
+raw_counts_pfas <- read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/pfas_manifest_v1.2/end2end/featurecounts_probenames/raw_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1) %>% select(-c("Chr","Start","End","Strand","Length"))
+
+
+# import ref featurecounts v2 end2end
+raw_counts_ref <- read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/end2end/featurecounts_probenames/raw_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1) %>% select(-c("Chr","Start","End","Strand","Length"))
+
+```
+Sum up all the counts for the genes in all the samples
+and divide by number of samples to get average count per sample
+Get only a clean df of just the counts per sample avg
+```{r}
+raw_counts_pfas_sums <- data.frame(mean = rowMeans(raw_counts_pfas))
+raw_counts_ref_sums <- data.frame(mean = rowMeans(raw_counts_ref))
+```
+
+_________________________________________________________________
+Import the manifests
+```{r}
+# import the manifest v2
+manifest_v2 <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/manifest/100766_homo_sapiens_s1500_2.0_full_manifest_revB_2024.csv") %>% select("GENE_SYMBOL","PROBE_NAME","PROBE_SEQUENCE") %>% rename()
+
+# import the manifest v1.2
+manifest_v1 <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/manifest_v1/181019+Human+S1500++Surrogate+1.2+Manifest.csv") %>% select("Gene.Symbol","Probe.name","Probe.Sequence") %>% rename("GENE_SYMBOL"="Gene.Symbol","PROBE_NAME"="Probe.name","PROBE_SEQUENCE"="Probe.Sequence")
+```
+
+```{r}
+manifest_v2
+manifest_v1
+```
+Count the number of GC
+```{r}
+manifest_v2$GC_ct <- str_count(manifest_v2$PROBE_SEQUENCE,c("[GC]"))
+manifest_v1$GC_ct <- str_count(manifest_v1$PROBE_SEQUENCE,c("[GC]"))
+```
+Sequence length
+```{r}
+manifest_v2$seq_len <- nchar(manifest_v2$PROBE_SEQUENCE)
+manifest_v1$seq_len <- nchar(manifest_v1$PROBE_SEQUENCE)
+```
+
+```{r}
+manifest_v2$GC_pct <- manifest_v2$GC_ct/manifest_v2$seq_len
+manifest_v1$GC_pct <- manifest_v1$GC_ct/manifest_v1$seq_len
+```
+
+Plot the GC percentages distribution
+```{r}
+ggplot(manifest_v2, aes(x=GC_pct)) + 
+  geom_histogram(color = "black", fill = "steelblue") +
+  labs(x = "GC Percentage", y = "Number of Probes") +
+  scale_x_continuous(labels = scales::label_percent()) +
+  ggtitle("Histogram of GC% of the Probes in Manifest v2") +
+  theme_minimal()
+```
+```{r}
+ggplot(manifest_v1, aes(x=GC_pct)) + 
+  geom_histogram(color = "black", fill = "steelblue") +
+  labs(x = "GC Percentage", y = "Number of Probes") +
+  scale_x_continuous(labels = scales::label_percent()) +
+  ggtitle("Histogram of GC% of the Probes in Manifest v1.2") +
+  theme_minimal()
+```
+__________________________________________
+Verify that the probenames are the same
+```{r}
+setdiff(manifest_v1$PROBE_NAME,rownames(raw_counts_pfas_sums))
+setdiff(manifest_v2$PROBE_NAME,rownames(raw_counts_ref_sums))
+```
+
+Now compare the GC% of the probes with the actual counts
+```{r}
+comparison_ref <- raw_counts_ref_sums %>%
+  rownames_to_column("PROBE_NAME") %>%
+  inner_join(manifest_v2 %>% select(PROBE_NAME, GC_pct, seq_len), by = "PROBE_NAME")
+
+comparison_pfas <- raw_counts_pfas_sums %>%
+  rownames_to_column("PROBE_NAME") %>%
+  inner_join(manifest_v1 %>% select(PROBE_NAME, GC_pct, seq_len), by = "PROBE_NAME")
+
+nrow(comparison_ref); nrow(raw_counts_ref_sums)  # check few probes were lost
+nrow(comparison_pfas); nrow(raw_counts_pfas_sums)  # check few probes were lost
+```
+
+```{r}
+head(comparison_ref)
+dim(comparison_ref)
+```
+Create a scatter plot
+```{r}
+#reference
+ggplot(comparison_ref, aes(x = GC_pct, log10(mean + 1))) +
+  geom_point(alpha = 0.3, size = 1) +
+  # geom_point(na.rm = TRUE) +
+  geom_smooth(method = "gam", color = "red", se = TRUE) + # gam for large datasets >1000
+  labs(
+    title = "Average Number of Reads per GC % of Probe: Reference Dataset Manifest v2",
+    x = "GC Percentage of the Probe",
+    y = "log10(average count + 1)"
+  ) +
+  scale_x_continuous(labels = scales::label_percent()) +
+  theme_minimal()
+```
+```{r}
+#pfas
+ggplot(comparison_pfas, aes(x = GC_pct, log10(mean + 1))) +
+  geom_point(alpha = 0.3, size = 1) +
+  # geom_point(na.rm = TRUE) +
+  geom_smooth(method = "gam", color = "red", se = TRUE) + # gam for large datasets >1000
+  labs(
+    title = "Average Number of Reads per GC % of Probe: PFAS Dataset Manifest v1.2",
+    x = "GC Percentage of the Probe",
+    y = "log10(average count + 1)"
+  ) +
+  scale_x_continuous(labels = scales::label_percent()) +
+  theme_minimal()
+
+```
+
