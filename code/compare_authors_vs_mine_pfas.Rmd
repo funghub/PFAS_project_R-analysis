@@ -60,7 +60,7 @@ Ref Compounds
 #                       ) 
 
 #END2END
-bowtie_ref <- subset(read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/end2end/featurecounts_probenames/raw_counts.txt", header=TRUE, sep = "\t", row.names = 1),
+bowtie_ref <- subset(read.table("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/bowtie/ref/end2end/featurecounts_probenames/raw_counts_probenames.txt", header=TRUE, sep = "\t", row.names = 1),
                       select = -c(Chr,Start,End,Strand,Length)
                       )
 bowtie_ref <- bowtie_ref %>% rename_with(~gsub("_.*", "", .x))

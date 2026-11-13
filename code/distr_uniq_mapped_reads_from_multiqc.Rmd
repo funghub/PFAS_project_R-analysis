@@ -1,0 +1,256 @@
+---
+title: "STAR Alignment Versus Bowtie2 End-to-End Alignment: distribution of uniquely mapped and unmapped reads"
+output: html_notebook
+---
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+Get STAR alignment metrics PFAS
+```{r}
+star_pfas <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/star_alignment_plot_pfas.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+head(star_pfas)
+```
+
+
+
+
+Get Bowtie end2end alignment v2 metrics PFAS
+```{r}
+bowtie_pfasv2 <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/bowtie2_se_plot_pfasv2.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+head(bowtie_pfasv2)
+```
+
+Get Bowtie end2end alignment v1.2 metrics PFAS
+```{r}
+bowtie_pfasv1.2 <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/bowtie2_se_plot_pfasv1.2.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+head(bowtie_pfasv1.2)
+```
+```{r}
+star_long <- star_pfas %>%
+  rownames_to_column("sample") %>%
+  mutate(total = rowSums(across(-sample)),
+         not_aligned = rowSums(across(starts_with("Unmapped")))) %>%
+  transmute(sample, tool = "STAR", total,
+            uniq_reads = `Uniquely mapped`, na_reads = not_aligned)
+
+bowtie_longv2 <- bowtie_pfasv2 %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2 v1.2", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+bowtie_longv1.2 <- bowtie_pfasv1.2 %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2 v2", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+star_long$tool        <- "STAR"
+bowtie_longv2$tool    <- "Bowtie2 v2"
+bowtie_longv1.2$tool  <- "Bowtie2 v1.2"
+
+cmp <- bind_rows(star_long, bowtie_longv1.2, bowtie_longv2) %>%
+  mutate(uniq_pct = 100 * uniq_reads / total,
+         na_pct   = 100 * na_reads / total,
+         tool = factor(tool, levels = c("STAR", "Bowtie2 v1.2", "Bowtie2 v2")))
+
+plot_cmp <- function(cols, ylab, title=NULL, log = FALSE) {
+  d <- cmp %>%
+    pivot_longer(all_of(names(cols)), names_to = "category", values_to = "value") %>%
+    mutate(category = recode(category, !!!cols))
+  p <- ggplot(d, aes(tool, value, fill = tool)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    geom_line(aes(group = sample), color = "grey60", alpha = 0.04) +
+    # geom_point(alpha = 0.1, size = 0.8) +
+    geom_jitter(width = 0.15, alpha = 0.15, size = 0.8, shape = 16) +
+    facet_wrap(~category, scales = "free_y") +
+    labs(x = NULL, y = ylab, title = title) +
+    theme_bw() + theme(legend.position = "none")
+  if (log) p <- p + scale_y_log10()
+  p}
+
+
+# Percentages
+plot_cmp(c(uniq_pct = "Uniquely mapped", na_pct = "Not aligned"), "% of reads",
+         title = "STAR vs Bowtie2 end-to-end alignment rates manifest v1.2 & 2 (PFAS Dataset)")
+
+# Read counts
+plot_cmp(c(uniq_reads = "Uniquely mapped", na_reads = "Not aligned"), "Reads", 
+         title = "STAR vs Bowtie2 end-to-end read counts manifest v1.2 & 2 (PFAS Dataset)", log = TRUE)
+```
+
+
+
+
+Get STAR alignment metrics ref
+```{r}
+star_ref <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/star_alignment_plot_ref.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+head(star_ref)
+```
+
+
+Get Bowtie end2end alignment metrics ref
+```{r}
+bowtie_ref <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/bowtie2_se_plot_ref.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+head(bowtie_ref)
+```
+
+```{r}
+star_long <- star_ref %>%
+  rownames_to_column("sample") %>%
+  mutate(total = rowSums(across(-sample)),
+         not_aligned = rowSums(across(starts_with("Unmapped")))) %>%
+  transmute(sample, tool = "STAR", total,
+            uniq_reads = `Uniquely mapped`, na_reads = not_aligned)
+
+bowtie_long <- bowtie_ref %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+cmp <- bind_rows(star_long, bowtie_long) %>%
+  mutate(uniq_pct = 100 * uniq_reads / total,
+         na_pct   = 100 * na_reads / total)
+
+plot_cmp <- function(cols, ylab, title=NULL, log = FALSE) {
+  d <- cmp %>%
+    pivot_longer(all_of(names(cols)), names_to = "category", values_to = "value") %>%
+    mutate(category = recode(category, !!!cols))
+  p <- ggplot(d, aes(tool, value, fill = tool)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    geom_line(aes(group = sample), color = "grey60", alpha = 0.03) +
+    # geom_point(alpha = 0.1, size = 0.8) +
+    geom_jitter(width = 0.15, alpha = 0.15, size = 0.8, shape = 16) +
+    facet_wrap(~category, scales = "free_y") +
+    labs(x = NULL, y = ylab, title = title) +
+    theme_bw() + theme(legend.position = "none")
+  if (log) p <- p + scale_y_log10()
+  p}
+
+
+# Percentages
+plot_cmp(c(uniq_pct = "Uniquely mapped", na_pct = "Not aligned"), "% of reads",
+         title = "STAR vs Bowtie2 end-to-end alignment rates manifest v2 (Reference Dataset)")
+
+# Read counts
+plot_cmp(c(uniq_reads = "Uniquely mapped", na_reads = "Not aligned"), "Reads", 
+         title = "STAR vs Bowtie2 end-to-end read counts manifest v2 (Reference Dataset)", log = TRUE)
+```
+
+
+# compare end-to-end vs local
+import pfas 1.2 local
+(bowtie_pfasv1.2 is the end2end one)
+```{r}
+bowtie_pfasv1.2_local <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/bowtie2_se_plot_pfas1.2_local.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+head(bowtie_pfasv1.2_local)
+```
+
+PFAS Dataset (use only manifest v1.2)
+```{r}
+bowtie_pfasv1.2_local <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/bowtie2_se_plot_pfas1.2_local.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+
+bowtie_longv1.2_local <- bowtie_pfasv1.2_local %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie_local$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2 local", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+bowtie_longv1.2_end <- bowtie_pfasv1.2 %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2 end-2-end", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+bowtie_pfasv1.2_local$tool <- "Bowtie2 local"
+bowtie_longv1.2$tool  <- "Bowtie2 end-2-end"
+
+cmp <- bind_rows(bowtie_longv1.2_local, bowtie_longv1.2_end) %>%
+  mutate(uniq_pct = 100 * uniq_reads / total,
+         na_pct   = 100 * na_reads / total,
+         tool = factor(tool, levels = c("Bowtie2 local", "Bowtie2 end-2-end")))
+
+plot_cmp <- function(cols, ylab, title=NULL, log = FALSE) {
+  d <- cmp %>%
+    pivot_longer(all_of(names(cols)), names_to = "category", values_to = "value") %>%
+    mutate(category = recode(category, !!!cols))
+  p <- ggplot(d, aes(tool, value, fill = tool)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    geom_line(aes(group = sample), color = "grey60", alpha = 0.04) +
+    # geom_point(alpha = 0.3, size = 0.8) +
+    geom_jitter(width = 0.15, alpha = 0.2, size = 0.8, shape = 16) +
+    facet_wrap(~category, scales = "free_y") +
+    labs(x = NULL, y = ylab, title = title) +
+    theme_bw() + theme(legend.position = "none")
+  if (log) p <- p + scale_y_log10()
+  p}
+
+
+# Percentages
+plot_cmp(c(uniq_pct = "Uniquely mapped", na_pct = "Not aligned"), "% of reads",
+         title = "Bowtie2 end-to-end vs local alignment rates manifest v1.2 (PFAS Dataset)")
+
+# Read counts
+plot_cmp(c(uniq_reads = "Uniquely mapped", na_reads = "Not aligned"), "Reads", 
+         title = "Bowtie2 end-to-end vs local read counts manifest v1.2 (PFAS Dataset)", log = TRUE)
+```
+
+Reference Dataset 
+```{r}
+bowtie_ref_local <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pipeline/Results_from_pipeline/from_multiqc/bowtie2_se_plot_ref_local.tsv", sep = "\t", row.names = 1, check.names = FALSE)
+
+bowtie_long_ref_local <- bowtie_ref_local %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie_local$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2 local", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+bowtie_long_end <- bowtie_ref %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = sub("_bowtie$", "", sample),
+         total = rowSums(across(-sample))) %>%
+  transmute(sample, tool = "Bowtie2 end-2-end", total,
+            uniq_reads = `SE mapped uniquely`, na_reads = `SE not aligned`)
+
+bowtie_long_ref_local$tool <- "Bowtie2 local"
+bowtie_long_end$tool  <- "Bowtie2 end-2-end"
+
+cmp <- bind_rows(bowtie_long_ref_local, bowtie_long_end) %>%
+  mutate(uniq_pct = 100 * uniq_reads / total,
+         na_pct   = 100 * na_reads / total,
+         tool = factor(tool, levels = c("Bowtie2 local", "Bowtie2 end-2-end")))
+
+plot_cmp <- function(cols, ylab, title=NULL, log = FALSE) {
+  d <- cmp %>%
+    pivot_longer(all_of(names(cols)), names_to = "category", values_to = "value") %>%
+    mutate(category = recode(category, !!!cols))
+  p <- ggplot(d, aes(tool, value, fill = tool)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    geom_line(aes(group = sample), color = "grey60", alpha = 0.04) +
+    # geom_point(alpha = 0.3, size = 0.8) +
+    geom_jitter(width = 0.15, alpha = 0.3, size = 0.8, shape = 16) +
+    facet_wrap(~category, scales = "free_y") +
+    labs(x = NULL, y = ylab, title = title) +
+    theme_bw() + theme(legend.position = "none")
+  if (log) p <- p + scale_y_log10()
+  p}
+
+
+# Percentages
+plot_cmp(c(uniq_pct = "Uniquely mapped", na_pct = "Not aligned"), "% of reads",
+         title = "Bowtie2 end-to-end vs local alignment rates (Reference Dataset)")
+
+# Read counts
+plot_cmp(c(uniq_reads = "Uniquely mapped", na_reads = "Not aligned"), "Reads", 
+         title = "Bowtie2 end-to-end vs local read counts (Reference Dataset)", log = TRUE)
+```
+

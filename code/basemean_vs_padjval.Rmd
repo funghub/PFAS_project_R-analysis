@@ -1,0 +1,41 @@
+---
+title: "basemean_padjval"
+# output: html_notebook
+---
+```{r}
+library(ggplot2)
+```
+
+
+plot the log2fold change vs basemean from the deseq results
+```{r}
+# deseq_results <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/data/deseq_results/DESeq2_analysis_results-2026-11-06-PFBS-DMSO_pfas-1_10-chemical_duration-all-stat-decreasing/deseq2_results.csv")
+
+deseq_results <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/data/deseq_results/DESeq2_analysis_results-2026-11-12-PFOS-DMSO_pfas-1_10-chemical_duration-10_20-stat-decreasing/deseq2_results.csv")
+
+```
+
+```{r}
+head(deseq_results)
+```
+
+```{r}
+ggplot(deseq_results, aes(x = log10(baseMean), -log10(padj))) +
+  geom_point(alpha = 0.3, size = 1) +
+  # geom_point(na.rm = TRUE) +
+  # geom_smooth(method = "gam", color = "red", se = TRUE) + # gam for large datasets >1000
+  labs(
+    title = "BaseMean Compared to P-value Adjusted",
+    x = "baseMean (log10)",
+    y = "-log10(padj)"
+  ) +
+  # geom_hex(bins = 60) +
+  # scale_x_continuous(labels = scales::label_percent()) +
+  coord_cartesian(xlim = c(0, NA)) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  theme_minimal()
+
+```
+
+-log10(padj)
+the pvalue is more significant going up the graph (up y axis as y increases)

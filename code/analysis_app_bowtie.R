@@ -319,7 +319,7 @@ run_deseq_analysis <- function(chemicals_chosen,controls_chosen,duration_chosen,
     colData = metadata_all_filtered, # metadata info about samples
     # design = ~ chemical
     # design = ~ chemical + duration # make this a user choice in the UI, and this as default
-    design = as.formula(design_txt)
+    design = as.formula(design_txt) # design formula
   )
   
   # specifying the reference level
@@ -368,17 +368,18 @@ run_deseq_analysis <- function(chemicals_chosen,controls_chosen,duration_chosen,
   resLFC$significant <- resLFC$padj < padj_value & abs(resLFC$log2FoldChange) > log2fold_absolute
   # T/F those with small pval & logfold>1 == significant
   
-  
-  # Create Gene List for gsea based on results (not results lfc shrink)
-  # gene_list <- res[[sort_deseq_res]] # extract the $stat column
   # Checks if the variable sort_deseq_res is set to either "stat"
   metric <- if (sort_deseq_res %in% c("stat", "log2FoldChange")) {
     sort_deseq_res
   }  else {
     "stat"
   }
+  
+  # Create Gene List for gsea based on results (not results lfc shrink)
   gene_list <- res[[metric]] # Pulls out the column corresponding to metric
   names(gene_list) <- rownames(res) # add row names into this df gene_list
+  # gene_list <- res[[sort_deseq_res]] # extract the $stat column
+  
   gene_list <- gene_list[!is.na(gene_list)] # remove NA stat rows
   rnk_df <- data.frame("SYMBOL" = names(gene_list), "METRIC" = gene_list) %>%
     arrange(desc(METRIC))
@@ -497,7 +498,7 @@ ui <- fluidPage(
       actionButton("run", "Run DESeq2"),
       hr(), # Horizontal dividing line
       downloadButton("download_data", "Download All Results & Plots (.zip)"),
-      p("File name will be: DESeq2_analysis_results-{date}-{chemicals}-{controls}-{durations}-{designterms}-{dosages}-{sortresultsby}-{sortorder}.zip")
+      p("File name will be: DESeq2_analysis_results-{date}-{chemicals}-{controls}-{durations}-{designterms}-{dosages}-{sortresultsby}-{sortorder}.zip\\Please switch back to Plots & Tables Tab to download to get correct file name.")
     ),
     mainPanel(
       tabsetPanel(
@@ -760,8 +761,8 @@ server <- function(input, output, session) {
         order(res_table[[input$sort_res2]],
               decreasing = input$sort_dir2 == "decreasing"), ,drop = FALSE]
     }
-    # as.data.frame(head(res_table, 60))
-    as.data.frame(res_table)
+    as.data.frame(head(res_table, 60))
+    # as.data.frame(res_table)
   }, rownames = TRUE)
   
 
@@ -996,14 +997,20 @@ server <- function(input, output, session) {
     tbl <- as.data.frame(fgsea_run()$table)
     tbl <- tbl[order(tbl$padj), ]
     
-    ggplot(tbl, aes(reorder(pathway, NES), NES)) +
+    #Filter to top 15 upregulated and top 15 downregulated to keep the plot from overlapping
+    top_up <- head(tbl[tbl$NES > 0, ], 15)
+    top_down <- head(tbl[tbl$NES < 0, ], 15)
+    tbl_subset <- rbind(top_up, top_down)
+    
+    # ggplot(tbl, aes(reorder(pathway, NES), NES)) +
+    ggplot(tbl_subset, aes(reorder(pathway, NES), NES)) +
       geom_col(aes(fill = padj < 0.05)) +
       coord_flip() +
       labs(x = "Pathway", y = "Normalized Enrichment Score",
            title = "Pathways NES from GSEA") + 
       theme_minimal()
   }, height = function() {
-    max(400, nrow(fgsea_run()$table) * 20) # 20px per pathway, minimum 400px
+    # max(400, nrow(fgsea_run()$table) * 20) # 20px per pathway, minimum 400px
   })
   
   # top up/down pathways with enrichment curves (data.table syntax, table kept as data.table)

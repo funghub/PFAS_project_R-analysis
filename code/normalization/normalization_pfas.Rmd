@@ -1,6 +1,6 @@
 ---
 title: "R Notebook"
-output: html_notebook
+# output: html_notebook
 ---
 
 Put in the featurecounts here
@@ -104,6 +104,11 @@ Now replace sample names with the unified name in counts
 ```{r}
 head(raw_counts_all)
 ```
+```{r}
+lib_size <- colSums(raw_counts_all)
+summary(lib_size)        # min, median, max
+min(lib_size) / 1e6      # smallest library in millions
+```
 
 raw_counts_all is now ready for normalization
 ```{r}
@@ -125,6 +130,16 @@ raw_counts_all_norm <- as.data.frame(
 
 rownames(raw_counts_all_norm) <- rownames(raw_counts_all)
 raw_counts_all_norm
+```
+```{r}
+lib_size <- colSums(raw_counts_all_norm)
+summary(lib_size)        # min, median, max
+min(lib_size) / 1e6      # smallest library in millions
+```
+```{r}
+lib_size <- rowSums(raw_counts_all_norm)
+summary(lib_size)        # min, median, max
+min(lib_size) / 1e6      # smallest library in millions
 ```
 
 Filter out low count genes
@@ -366,14 +381,15 @@ pfas_1d_n_up   <- colSums(pfas_M_1d >  1)
 pfas_1d_n_down <- colSums(pfas_M_1d < -1)
 
 cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(pfas_M_1d),
+df_1d_pfas <- data.frame(
+  sample = colnames(pfas_M_1d),
            total_genes = pfas_1d_n_genes, 
            genes_up = pfas_1d_n_up, 
            genes_down = pfas_1d_n_down, 
            genes_DE = pfas_1d_n_DE, 
            percent_DE = percent(round(pfas_1d_n_DE / pfas_1d_n_genes, 3),
                                 accuracy=0.1))
+df_1d_pfas
 ```
 ## Looking at 10 Days PFAS
 Look at PFAS 10d
@@ -393,7 +409,7 @@ samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration
                    )
 samples_names                                       # check which columns were picked
 
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_pfas.% s.0uM", duration)] 
+log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_pfas.%s.0uM", duration)]
 # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
 
 # --------------------------------------------------
@@ -407,14 +423,16 @@ n_up   <- colSums(log_fold_changes >  1)
 n_down <- colSums(log_fold_changes < -1)
 
 cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
+df_10d_pfas <- data.frame(
+  sample = colnames(log_fold_changes),
            total_genes = n_genes,
            genes_up = n_up, 
            genes_down = n_down, 
            genes_DE = n_DE, 
            percent_DE = percent(round(n_DE / n_genes, 3),
                                 accuracy=0.1))
+
+df_10d_pfas
 ```
 See any differences in the control names
 ```{r}
@@ -424,170 +442,226 @@ grep("^water[^.]*", colnames(lcpm_avg), value = TRUE)
 ```
 
 
+
+
+
+Combine all DF into one DF for plotting histogram of percent_DE
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+combined_df <- rbind(df_1d_pfas, df_10d_pfas)
+
+# 1. Convert "50.8%" (character) to 50.8 (numeric)
+combined_df_fixed <- mutate(combined_df, percent_num = parse_number(percent_DE))
+
+ggplot(combined_df_fixed, aes(x = percent_num)) +
+  geom_histogram(
+    binwidth = 10,       # Bucket size (e.g., 10% wide)
+    boundary = 0,        # Aligns buckets cleanly (0-10, 10-20, etc.)
+    fill = "steelblue", 
+    color = "black"
+  ) +
+  scale_x_continuous(breaks = seq(0, 100, by = 10)) +
+  labs(
+    title = "Distribution of Percent DE Across Treatment Conditions in PFAS Dataset\n(Bowtie2 end-to-end manifest v1.2)",
+    x = "Percent DE (%)",
+    y = "Number of Conditions"
+  ) +
+  theme_minimal()
+# contains only sample: PFAS
+# no DMSO control samples
+# replicates are averaged already
+# (Rows Represent Treatments)
+# (summarizing unique chemical-dose-duration groups after replicate-averaging and subsetting)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Looking at 1 Days Reference Compounds
 Look at the Reference Compounds log2fold change 1d (control DMSO_ref)
 ```{r}
-duration = "1d"
-chemicals = c("acetaminophen","aflatoxin_B1","cyclosporin_A","WY.14643","rosiglitazone","troglitazone")
-group_chemicals = paste(chemicals, collapse="|")
-
-
-# PFAS columns at 1 days (starts with PF, contains ".4d.")
-# get the column names that are PFAS 1d'
-cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
-samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
-                      colnames(lcpm_avg), value = TRUE) # % s for string placeholder
-                   # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
-                   #    colnames(lcpm_avg), value = TRUE)
-                   )
-samples_names                                       # check which columns were picked
-
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.% s.0uM", duration)] 
-# compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
-
-# --------------------------------------------------
-
-# CALCULATE percentage of genes differentially expressed log2fold > 1
-n_genes <- nrow(log_fold_changes)
-n_DE <- colSums(abs(log_fold_changes)>1)
-
-# split by direction
-n_up   <- colSums(log_fold_changes >  1)
-n_down <- colSums(log_fold_changes < -1)
-
-cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
-           total_genes = n_genes,
-           genes_up = n_up, 
-           genes_down = n_down, 
-           genes_DE = n_DE, 
-           percent_DE = percent(round(n_DE / n_genes, 3),
-                                accuracy=0.1))
+# duration = "1d"
+# chemicals = c("acetaminophen","aflatoxin_B1","cyclosporin_A","WY.14643","rosiglitazone","troglitazone")
+# group_chemicals = paste(chemicals, collapse="|")
+# 
+# 
+# # PFAS columns at 1 days (starts with PF, contains ".4d.")
+# # get the column names that are PFAS 1d'
+# cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
+# samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
+#                       colnames(lcpm_avg), value = TRUE) # % s for string placeholder
+#                    # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
+#                    #    colnames(lcpm_avg), value = TRUE)
+#                    )
+# samples_names                                       # check which columns were picked
+# 
+# log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.%s.0uM", duration)]
+# # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
+# 
+# # --------------------------------------------------
+# 
+# # CALCULATE percentage of genes differentially expressed log2fold > 1
+# n_genes <- nrow(log_fold_changes)
+# n_DE <- colSums(abs(log_fold_changes)>1)
+# 
+# # split by direction
+# n_up   <- colSums(log_fold_changes >  1)
+# n_down <- colSums(log_fold_changes < -1)
+# 
+# cat("\nPercentage of Genes Differentially Expressed:\n")
+# data.frame(
+#   # sample = colnames(log_fold_changes),
+#            total_genes = n_genes,
+#            genes_up = n_up, 
+#            genes_down = n_down, 
+#            genes_DE = n_DE, 
+#            percent_DE = percent(round(n_DE / n_genes, 3),
+#                                 accuracy=0.1))
 ```
 Look at the Reference Compounds log2fold change 1d (control water)
 ```{r}
-duration = "1d"
-chemicals = c("caffeine","sucrose","potassium_chloride")
-group_chemicals = paste(chemicals, collapse="|")
-
-
-# PFAS columns at 1 days (starts with PF, contains ".4d.")
-# get the column names that are PFAS 1d'
-cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
-samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
-                      colnames(lcpm_avg), value = TRUE) # % s for string placeholder
-                   # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
-                   #    colnames(lcpm_avg), value = TRUE)
-                   )
-samples_names                                       # check which columns were picked
-
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("water.% s.0uM", duration)] 
-# compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
-
-# --------------------------------------------------
-
-# CALCULATE percentage of genes differentially expressed log2fold > 1
-n_genes <- nrow(log_fold_changes)
-n_DE <- colSums(abs(log_fold_changes)>1)
-
-# split by direction
-n_up   <- colSums(log_fold_changes >  1)
-n_down <- colSums(log_fold_changes < -1)
-
-cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
-           total_genes = n_genes,
-           genes_up = n_up, 
-           genes_down = n_down, 
-           genes_DE = n_DE, 
-           percent_DE = percent(round(n_DE / n_genes, 3),
-                                accuracy=0.1))
+# duration = "1d"
+# chemicals = c("caffeine","sucrose","potassium_chloride")
+# group_chemicals = paste(chemicals, collapse="|")
+# 
+# 
+# # PFAS columns at 1 days (starts with PF, contains ".4d.")
+# # get the column names that are PFAS 1d'
+# cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
+# samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
+#                       colnames(lcpm_avg), value = TRUE) # % s for string placeholder
+#                    # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
+#                    #    colnames(lcpm_avg), value = TRUE)
+#                    )
+# samples_names                                       # check which columns were picked
+# 
+# log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("water.% s.0uM", duration)] 
+# # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
+# 
+# # --------------------------------------------------
+# 
+# # CALCULATE percentage of genes differentially expressed log2fold > 1
+# n_genes <- nrow(log_fold_changes)
+# n_DE <- colSums(abs(log_fold_changes)>1)
+# 
+# # split by direction
+# n_up   <- colSums(log_fold_changes >  1)
+# n_down <- colSums(log_fold_changes < -1)
+# 
+# cat("\nPercentage of Genes Differentially Expressed:\n")
+# data.frame(
+#   # sample = colnames(log_fold_changes),
+#            total_genes = n_genes,
+#            genes_up = n_up, 
+#            genes_down = n_down, 
+#            genes_DE = n_DE, 
+#            percent_DE = percent(round(n_DE / n_genes, 3),
+#                                 accuracy=0.1))
 ```
 
 
 ## Looking at 10 Days Reference Compounds
 Look at the Reference Compounds log2fold change 10d (control DMSO_ref)
 ```{r}
-duration = "10d"
-chemicals = c("acetaminophen","aflatoxin_B1","cyclosporin_A","WY.14643","rosiglitazone","troglitazone")
-group_chemicals = paste(chemicals, collapse="|")
-
-
-# PFAS columns at 1 days (starts with PF, contains ".4d.")
-# get the column names that are PFAS 1d'
-cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
-samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
-                      colnames(lcpm_avg), value = TRUE) # % s for string placeholder
-                   # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
-                   #    colnames(lcpm_avg), value = TRUE)
-                   )
-samples_names                                       # check which columns were picked
-
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.% s.0uM", duration)] 
-# compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
-
-# --------------------------------------------------
-
-# CALCULATE percentage of genes differentially expressed log2fold > 1
-n_genes <- nrow(log_fold_changes)
-n_DE <- colSums(abs(log_fold_changes)>1)
-
-# split by direction
-n_up   <- colSums(log_fold_changes >  1)
-n_down <- colSums(log_fold_changes < -1)
-
-cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
-           total_genes = n_genes,
-           genes_up = n_up, 
-           genes_down = n_down, 
-           genes_DE = n_DE, 
-           percent_DE = percent(round(n_DE / n_genes, 3),
-                                accuracy=0.1))
+# duration = "10d"
+# chemicals = c("acetaminophen","aflatoxin_B1","cyclosporin_A","WY.14643","rosiglitazone","troglitazone")
+# group_chemicals = paste(chemicals, collapse="|")
+# 
+# 
+# # PFAS columns at 1 days (starts with PF, contains ".4d.")
+# # get the column names that are PFAS 1d'
+# cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
+# samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
+#                       colnames(lcpm_avg), value = TRUE) # % s for string placeholder
+#                    # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
+#                    #    colnames(lcpm_avg), value = TRUE)
+#                    )
+# samples_names                                       # check which columns were picked
+# 
+# log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.% s.0uM", duration)] 
+# # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
+# 
+# # --------------------------------------------------
+# 
+# # CALCULATE percentage of genes differentially expressed log2fold > 1
+# n_genes <- nrow(log_fold_changes)
+# n_DE <- colSums(abs(log_fold_changes)>1)
+# 
+# # split by direction
+# n_up   <- colSums(log_fold_changes >  1)
+# n_down <- colSums(log_fold_changes < -1)
+# 
+# cat("\nPercentage of Genes Differentially Expressed:\n")
+# data.frame(
+#   # sample = colnames(log_fold_changes),
+#            total_genes = n_genes,
+#            genes_up = n_up, 
+#            genes_down = n_down, 
+#            genes_DE = n_DE, 
+#            percent_DE = percent(round(n_DE / n_genes, 3),
+#                                 accuracy=0.1))
 ```
 
 Look at the Reference Compounds log2fold change 10d (control water)
 ```{r}
-duration = "10d"
-chemicals = c("caffeine","sucrose","potassium_chloride")
-group_chemicals = paste(chemicals, collapse="|")
-
-
-# PFAS columns at 1 days (starts with PF, contains ".4d.")
-# get the column names that are PFAS 1d'
-cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
-samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
-                      colnames(lcpm_avg), value = TRUE) # % s for string placeholder
-                   # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
-                   #    colnames(lcpm_avg), value = TRUE)
-                   )
-samples_names                                       # check which columns were picked
-
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("water.% s.0uM", duration)] 
-# compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
-
-# --------------------------------------------------
-
-# CALCULATE percentage of genes differentially expressed log2fold > 1
-n_genes <- nrow(log_fold_changes)
-n_DE <- colSums(abs(log_fold_changes)>1)
-
-# split by direction
-n_up   <- colSums(log_fold_changes >  1)
-n_down <- colSums(log_fold_changes < -1)
-
-cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
-           total_genes = n_genes,
-           genes_up = n_up, 
-           genes_down = n_down, 
-           genes_DE = n_DE, 
-           percent_DE = percent(round(n_DE / n_genes, 3),
-                                accuracy=0.1))
+# duration = "10d"
+# chemicals = c("caffeine","sucrose","potassium_chloride")
+# group_chemicals = paste(chemicals, collapse="|")
+# 
+# 
+# # PFAS columns at 1 days (starts with PF, contains ".4d.")
+# # get the column names that are PFAS 1d'
+# cat("\nColumns that are",paste(chemicals, collapse=", "),duration,":\n")
+# samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration), 
+#                       colnames(lcpm_avg), value = TRUE) # % s for string placeholder
+#                    # grep(sprintf("^WY\\.14643\\.% s\\.", duration), 
+#                    #    colnames(lcpm_avg), value = TRUE)
+#                    )
+# samples_names                                       # check which columns were picked
+# 
+# log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("water.% s.0uM", duration)] 
+# # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
+# 
+# # --------------------------------------------------
+# 
+# # CALCULATE percentage of genes differentially expressed log2fold > 1
+# n_genes <- nrow(log_fold_changes)
+# n_DE <- colSums(abs(log_fold_changes)>1)
+# 
+# # split by direction
+# n_up   <- colSums(log_fold_changes >  1)
+# n_down <- colSums(log_fold_changes < -1)
+# 
+# cat("\nPercentage of Genes Differentially Expressed:\n")
+# data.frame(
+#   # sample = colnames(log_fold_changes),
+#            total_genes = n_genes,
+#            genes_up = n_up, 
+#            genes_down = n_down, 
+#            genes_DE = n_DE, 
+#            percent_DE = percent(round(n_DE / n_genes, 3),
+#                                 accuracy=0.1))
 ```
 
 
@@ -601,13 +675,13 @@ cat("Using Median:")
 
 for (d in c("1d", "10d")) {
   w <- grep(sprintf("^water\\.%s\\.0uM", d), colnames(lcpm), value = TRUE)
-  
+
   # Compute gene-wise median for this group
   group_median <- apply(lcpm[, w, drop = FALSE], 1, median)
-  
+
   # Fraction of genes deviating from the group median by > 1 log2 unit
   outlier_frac <- colMeans(abs(lcpm[, w, drop = FALSE] - group_median) > 1)
-  
+
   print(outlier_frac)
 }
 

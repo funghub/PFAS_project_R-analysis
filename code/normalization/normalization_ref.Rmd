@@ -1,6 +1,6 @@
 ---
 title: "R Notebook"
-output: html_notebook
+# output: html_notebook
 ---
 
 Put in the featurecounts here
@@ -104,6 +104,12 @@ Now replace sample names with the unified name in counts
 ```{r}
 head(raw_counts_all)
 ```
+```{r}
+lib_size <- colSums(raw_counts_all)
+summary(lib_size)        # min, median, max
+min(lib_size) / 1e6      # smallest library in millions
+```
+
 
 raw_counts_all is now ready for normalization
 ```{r}
@@ -441,7 +447,7 @@ samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration
                    )
 samples_names                                       # check which columns were picked
 
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.% s.0uM", duration)] 
+log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.%s.0uM", duration)] 
 # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
 
 # --------------------------------------------------
@@ -455,14 +461,15 @@ n_up   <- colSums(log_fold_changes >  1)
 n_down <- colSums(log_fold_changes < -1)
 
 cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
+df_1d_dmso_ref <- data.frame(
+  sample = colnames(log_fold_changes),
            total_genes = n_genes,
            genes_up = n_up, 
            genes_down = n_down, 
            genes_DE = n_DE, 
            percent_DE = percent(round(n_DE / n_genes, 3),
                                 accuracy=0.1))
+df_1d_dmso_ref
 ```
 Look at the Reference Compounds log2fold change 1d (control water)
 ```{r}
@@ -495,14 +502,15 @@ n_up   <- colSums(log_fold_changes >  1)
 n_down <- colSums(log_fold_changes < -1)
 
 cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
+df_1d_water_ref <- data.frame(
+  sample = colnames(log_fold_changes),
            total_genes = n_genes,
            genes_up = n_up, 
            genes_down = n_down, 
            genes_DE = n_DE, 
            percent_DE = percent(round(n_DE / n_genes, 3),
                                 accuracy=0.1))
+df_1d_water_ref
 ```
 
 
@@ -524,7 +532,7 @@ samples_names <- c(grep(sprintf("^(%s)[^.]*\\.% s\\.", group_chemicals, duration
                    )
 samples_names                                       # check which columns were picked
 
-log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.% s.0uM", duration)] 
+log_fold_changes <- lcpm_avg[, samples_names, drop = FALSE] - lcpm_avg[, sprintf("DMSO_ref.%s.0uM", duration)] 
 # compute log2fold change only for those found pfas 1d names of their gene counts from the control counts per gene
 
 # --------------------------------------------------
@@ -538,14 +546,15 @@ n_up   <- colSums(log_fold_changes >  1)
 n_down <- colSums(log_fold_changes < -1)
 
 cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
+df_10d_dmso_ref <- data.frame(
+  sample = colnames(log_fold_changes),
            total_genes = n_genes,
            genes_up = n_up, 
            genes_down = n_down, 
            genes_DE = n_DE, 
            percent_DE = percent(round(n_DE / n_genes, 3),
                                 accuracy=0.1))
+df_10d_dmso_ref
 ```
 
 Look at the Reference Compounds log2fold change 10d (control water)
@@ -579,15 +588,78 @@ n_up   <- colSums(log_fold_changes >  1)
 n_down <- colSums(log_fold_changes < -1)
 
 cat("\nPercentage of Genes Differentially Expressed:\n")
-data.frame(
-  # sample = colnames(log_fold_changes),
+df_10d_water_ref <- data.frame(
+  sample = colnames(log_fold_changes),
            total_genes = n_genes,
            genes_up = n_up, 
            genes_down = n_down, 
            genes_DE = n_DE, 
            percent_DE = percent(round(n_DE / n_genes, 3),
                                 accuracy=0.1))
+
+df_10d_water_ref
 ```
+
+
+
+
+Combine all DF into one DF for plotting histogram of percent_DE
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+combined_df <- rbind(df_1d_dmso_ref, df_1d_water_ref, df_10d_dmso_ref, df_10d_water_ref)
+
+# 1. Convert "50.8%" (character) to 50.8 (numeric)
+combined_df_fixed <- mutate(combined_df, percent_num = parse_number(percent_DE))
+
+ggplot(combined_df_fixed, aes(x = percent_num)) +
+  geom_histogram(
+    binwidth = 10,       # Bucket size (e.g., 10% wide)
+    boundary = 0,        # Aligns buckets cleanly (0-10, 10-20, etc.)
+    fill = "steelblue", 
+    color = "black"
+  ) +
+  scale_x_continuous(breaks = seq(0, 100, by = 10)) +
+  labs(
+    title = "Distribution of Percent DE Across Treatment Conditions in Reference Dataset\n(Bowtie2 end-to-end manifest v2)",
+    x = "Percent DE (%)",
+    y = "Number of Conditions"
+  ) +
+  theme_minimal()
+# contains only sample: caffeine","sucrose","potassium_chloride, acetaminophen","aflatoxin_B1","cyclosporin_A","WY.14643","rosiglitazone","troglitazone
+# no DMSO or technical control samples
+# replicates are averaged already
+# (Rows Represent Treatments)
+# (summarizing unique chemical-dose-duration groups after replicate-averaging and subsetting)
+```
+Count number of conditions >50% DE
+```{r}
+combined_df_fixed
+summary(combined_df_fixed$percent_num)
+sum(combined_df_fixed$percent_num < 50)
+```
+
+
+```{r}
+df <- data.frame(value = rnorm(1000, mean = 50, sd = 10))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 AI tests:
