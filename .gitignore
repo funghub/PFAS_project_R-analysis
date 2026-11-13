@@ -1,6 +1,7 @@
 useless
 data/data_input_deseq
 data/featureCounts
+data/deseq_results
 .Rproj.user
 results_analysis
 GSEA_LinuxIntel_4.4.0-WithJava
