@@ -131,7 +131,7 @@ ggplot(merged_df, aes(x = chemical, y = SE.mapped.uniquely, fill = chemical)) +
   geom_boxplot(alpha = 0.5, outlier.shape = NA) +
   geom_jitter(width = 0.2, alpha = 0.9) + # Shows individual samples as dots
   labs(
-    title = "Read Count Distribution Across PFAS Chemicals",
+    title = "Reads Aligned Distribution Across PFAS Chemicals",
     x = "Chemical",
     y = "Uniquely Mapped Reads"
   ) +

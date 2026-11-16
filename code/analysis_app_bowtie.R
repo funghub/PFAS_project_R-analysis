@@ -589,7 +589,7 @@ ui <- fluidPage(
           tableOutput("fgsea_table"),
           hr(),
           h4("NES per pathway"),
-          plotOutput("fgsea_enrichment_plot"),
+          plotOutput("fgsea_enrichment_plot", height="auto"),
           hr(),
           h4("Top pathways with enrichment curves"),
           plotOutput("fgsea_enrichment_plot_labels"),
@@ -1010,7 +1010,7 @@ server <- function(input, output, session) {
            title = "Pathways NES from GSEA") + 
       theme_minimal()
   }, height = function() {
-    # max(400, nrow(fgsea_run()$table) * 20) # 20px per pathway, minimum 400px
+    max(400, nrow(fgsea_run()$table) * 20) # 20px per pathway, minimum 400px
   })
   
   # top up/down pathways with enrichment curves (data.table syntax, table kept as data.table)

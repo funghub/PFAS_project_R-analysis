@@ -49,6 +49,13 @@ manifest_v1 <- read.csv("~/Documents/School/thesis/PFAS_project_preprocessing_pi
 manifest_v2
 manifest_v1
 ```
+```{r}
+nrow(manifest_v1)
+manifest_v1[1, ]       # the first row
+nrow(manifest_v2)
+manifest_v2[1, ]       # the first row
+```
+
 Count the number of GC
 ```{r}
 manifest_v2$GC_ct <- str_count(manifest_v2$PROBE_SEQUENCE,c("[GC]"))
@@ -64,6 +71,24 @@ manifest_v1$seq_len <- nchar(manifest_v1$PROBE_SEQUENCE)
 manifest_v2$GC_pct <- manifest_v2$GC_ct/manifest_v2$seq_len
 manifest_v1$GC_pct <- manifest_v1$GC_ct/manifest_v1$seq_len
 ```
+
+```{r}
+ggplot(manifest_v1, aes(x = factor(seq_len, levels = 40:60))) +
+  geom_bar(fill = "steelblue", color = "black") +
+  scale_x_discrete(drop = FALSE, breaks = seq(40, 60, by = 5)) +
+  labs(title = "Number of Probes per Sequence Length in Manifest v1.2",
+       x = "Probe Sequence Length (nt)", y = "Number of Probes") +
+  theme_minimal()
+```
+```{r}
+ggplot(manifest_v2, aes(x = factor(seq_len, levels = 40:60))) +
+  geom_bar(fill = "steelblue", color = "black") +
+  scale_x_discrete(drop = FALSE, breaks = seq(40, 60, by = 5)) +
+  labs(title = "Number of Probes per Sequence Length in Manifest v2",
+       x = "Probe Sequence Length (nt)", y = "Number of Probes") +
+  theme_minimal()
+```
+
 
 Plot the GC percentages distribution
 ```{r}
