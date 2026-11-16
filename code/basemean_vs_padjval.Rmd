@@ -9,9 +9,9 @@ library(ggplot2)
 
 plot the log2fold change vs basemean from the deseq results
 ```{r}
-# deseq_results <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/data/deseq_results/DESeq2_analysis_results-2026-11-06-PFBS-DMSO_pfas-1_10-chemical_duration-all-stat-decreasing/deseq2_results.csv")
+deseq_results <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/data/deseq_results/DESeq2_analysis_results-2026-11-06-PFBS-DMSO_pfas-1_10-chemical_duration-all-stat-decreasing/deseq2_results.csv")
 
-deseq_results <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/data/deseq_results/DESeq2_analysis_results-2026-11-12-PFOS-DMSO_pfas-1_10-chemical_duration-10_20-stat-decreasing/deseq2_results.csv")
+# deseq_results <- read.csv("~/Documents/School/thesis/PFAS_project_R-analysis/data/deseq_results/DESeq2_analysis_results-2026-11-12-PFOS-DMSO_pfas-1_10-chemical_duration-10_20-stat-decreasing/deseq2_results.csv")
 
 ```
 
